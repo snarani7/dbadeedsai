@@ -1,6 +1,7 @@
 # dbadeeds.ai
 
 > AI-Powered Oracle Database Management Assistant
+<img width="1280" height="602" alt="dbadeeds" src="https://github.com/user-attachments/assets/d43d54a7-65ff-4b46-909b-462b16791485" />
 
 **dbadeeds.ai** is an autonomous AI DBA assistant designed for Support Desk teams during alerts and incidents. It helps navigate and manage Oracle databases using AI, performing diagnostics, executing operational playbooks, and answering database-related questions in real time — safely and intelligently.
 
@@ -187,4 +188,5 @@ For issues, questions, or suggestions, please open an issue in the repository.
 ---
 
 **Note**: This tool is designed for experienced database administrators and should be used with appropriate caution in production environments. Always verify AI-generated queries before execution on critical systems.
+
 
