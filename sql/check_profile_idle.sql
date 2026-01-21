@@ -1,0 +1,1 @@
+SELECT profile, resource_name, limit FROM dba_profiles 

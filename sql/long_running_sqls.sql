@@ -1,0 +1,1 @@
+SELECT sql_id, substr(sql_text, 1, 60) AS sql_text_part, elapsed_time/1000000 AS elapsed_sec FROM gv$sql WHERE elapsed_time/1000000 > 300 ORDER BY elapsed_sec DESC

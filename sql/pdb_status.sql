@@ -1,0 +1,1 @@
+ SELECT name, open_mode FROM gv$pdbs ORDER BY name

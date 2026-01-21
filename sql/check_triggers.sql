@@ -1,0 +1,1 @@
+SELECT owner, trigger_name, trigger_type, triggering_event, status FROM dba_triggers WHERE trigger_name LIKE '%LOGON%' ORDER BY owner, trigger_name

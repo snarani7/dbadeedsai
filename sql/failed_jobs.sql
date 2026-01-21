@@ -1,0 +1,1 @@
+SELECT log_date, owner, job_name, status, error# FROM dba_scheduler_job_run_details WHERE log_date > sysdate-1 AND status <> 'SUCCEEDED' ORDER BY log_date DESC
