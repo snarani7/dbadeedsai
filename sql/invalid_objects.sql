@@ -1,1 +1,0 @@
-SELECT owner, object_name, object_type, subobject_name, status FROM dba_objects WHERE status='INVALID'
