@@ -1,0 +1,96 @@
+version: "3.9"
+
+# ── Full production stack ──────────────────────────────────────────────────────
+# Components:
+#   app     — Flask + Gunicorn (your Python app)
+#   nginx   — Reverse proxy, SSL termination, static files
+#   redis   — Rate limiting and session cache (optional but recommended)
+#
+# Start: docker compose up -d
+# Logs:  docker compose logs -f app
+
+services:
+
+  # ── Flask application (Gunicorn) ────────────────────────────────────────────
+  app:
+    build: .
+    container_name: dbadeedsai_app
+    restart: unless-stopped
+    environment:
+      FLASK_ENV:          production
+      PORT:               5000
+      SECRET_KEY:         "${SECRET_KEY}"
+      JWT_SECRET_KEY:     "${JWT_SECRET_KEY}"
+      OPENAI_API_KEY:     "${OPENAI_API_KEY:-}"
+      ANTHROPIC_API_KEY:  "${ANTHROPIC_API_KEY:-}"
+      GROQ_API_KEY:       "${GROQ_API_KEY:-}"
+      REDIS_URL:          "redis://redis:6379/0"
+      CORS_ORIGINS:       "${CORS_ORIGINS:-http://localhost}"
+      GUNICORN_WORKERS:   "${GUNICORN_WORKERS:-4}"
+      LOG_LEVEL:          "${LOG_LEVEL:-info}"
+    volumes:
+      # Persist JSON stores (connections, users) outside the container
+      - app_data:/app/data
+      # Mount existing backend modules from Streamlit project
+      # Uncomment and adjust path if running alongside the Streamlit app:
+      # - ../dbadeedsai_v3_1/db_manager.py:/app/db_manager.py:ro
+      # - ../dbadeedsai_v3_1/sql_safety.py:/app/sql_safety.py:ro
+      # - ../dbadeedsai_v3_1/user_management.py:/app/user_management.py:ro
+      # - ../dbadeedsai_v3_1/content_filter.py:/app/content_filter.py:ro
+    depends_on:
+      - redis
+    networks:
+      - internal
+    # Don't expose app port directly — go through Nginx
+    expose:
+      - "5000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:5000/')"]
+      interval: 30s
+      timeout:  10s
+      retries:  3
+
+  # ── Nginx reverse proxy ─────────────────────────────────────────────────────
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: dbadeedsai_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ./nginx/ssl:/etc/nginx/ssl:ro        # Place your SSL certs here
+      - app_static:/app/static:ro            # Serve static files directly
+    depends_on:
+      - app
+    networks:
+      - internal
+      - external
+
+  # ── Redis (rate limiting + session cache) ───────────────────────────────────
+  redis:
+    image: redis:7.4-alpine
+    container_name: dbadeedsai_redis
+    restart: unless-stopped
+    command: redis-server --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout:  5s
+      retries:  5
+
+volumes:
+  app_data:
+  app_static:
+  redis_data:
+
+networks:
+  internal:
+    driver: bridge
+  external:
+    driver: bridge
