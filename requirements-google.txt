@@ -1,0 +1,20 @@
+# ═══════════════════════════════════════════════════════════════════════════════
+# Google AI (Gemini + Vertex AI) — install AFTER requirements.txt
+#
+# Usage:
+#   pip install -r requirements-google.txt
+#
+# For Vertex AI authentication:
+#   Option 1: gcloud auth application-default login
+#   Option 2: set GOOGLE_APPLICATION_CREDENTIALS=path/to/key.json
+#
+# For Gemini (API key):
+#   set GOOGLE_API_KEY=your_api_key
+# ═══════════════════════════════════════════════════════════════════════════════
+
+langchain-google-genai==2.1.4
+google-generativeai==0.8.5
+
+# Vertex AI (larger install — only needed if using Vertex AI provider)
+langchain-google-vertexai==2.0.23
+google-cloud-aiplatform==1.93.0
