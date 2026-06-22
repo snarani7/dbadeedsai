@@ -1,0 +1,340 @@
+{% extends "base.html" %}
+{% block title %}Notifications — dbadeeds.ai{% endblock %}
+{% block page_title %}🔔 Notifications{% endblock %}
+{% set active_page = 'notifications' %}
+
+{% block head %}
+<style>
+  .ntabs{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:20px}
+  .ntab{padding:10px 22px;font-size:13px;font-weight:600;cursor:pointer;border-bottom:3px solid transparent;margin-bottom:-2px;color:var(--muted);background:none;border-top:none;border-left:none;border-right:none;transition:all .15s}
+  .ntab:hover{color:var(--accent)}.ntab.active{color:var(--accent);border-bottom-color:var(--accent)}
+  .npanel{display:none}.npanel.active{display:block}
+  .ch-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:24px}
+  .ch-card{background:var(--surface);border:2px solid var(--border);border-radius:10px;padding:16px;cursor:pointer;transition:border-color .15s}
+  .ch-card.active-ch{border-color:var(--accent)}
+  .ch-card.configured{border-color:#22c55e}.ch-card.configured.active-ch{border-color:var(--accent)}
+  .ch-icon{font-size:24px;margin-bottom:8px}
+  .ch-name{font-size:13px;font-weight:600;color:var(--text)}
+  .ch-status{font-size:11px;margin-top:4px}
+  .st-on{color:#16a34a;font-weight:600}.st-off{color:var(--muted)}.st-cfg{color:#2563eb;font-weight:600}
+  .form-section{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:20px;margin-bottom:16px}
+  .form-section h4{font-size:13px;font-weight:700;color:var(--navy);margin:0 0 14px}
+  .field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+  .field-row.single{grid-template-columns:1fr}
+  .field-row.triple{grid-template-columns:1fr 1fr 1fr}
+  .fld label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);display:block;margin-bottom:4px}
+  .fld input,.fld select{width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--bg);color:var(--text);outline:none}
+  .fld input:focus,.fld select:focus{border-color:var(--accent)}
+  .toggle-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)}
+  .toggle-row:last-child{border-bottom:none}
+  .toggle-label{font-size:13px;font-weight:500;color:var(--text)}
+  .toggle-sub{font-size:11px;color:var(--muted);margin-top:2px}
+  .sw{position:relative;display:inline-block;width:40px;height:22px;flex-shrink:0}
+  .sw input{opacity:0;width:0;height:0}
+  .sw-sl{position:absolute;cursor:pointer;inset:0;background:#CBD5E1;border-radius:11px;transition:.2s}
+  .sw-sl:before{content:"";position:absolute;width:16px;height:16px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s}
+  input:checked+.sw-sl{background:var(--accent)}
+  input:checked+.sw-sl:before{transform:translateX(18px)}
+  .test-bar{display:flex;gap:8px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
+  .badge-kw{display:inline-block;background:#EFF6FF;color:#1D4ED8;font-size:10px;padding:2px 7px;border-radius:10px;margin:2px;font-family:monospace}
+  .run-history{font-size:12px}
+  .rh-row{display:grid;grid-template-columns:160px 100px 80px 1fr;gap:8px;padding:6px 0;border-bottom:1px solid var(--border);align-items:center}
+  .rh-head{font-weight:600;color:var(--muted);font-size:10px;text-transform:uppercase}
+  .status-ok{color:#16a34a;font-weight:600}.status-fail{color:#dc2626;font-weight:600}
+  .toast{position:fixed;bottom:20px;right:20px;z-index:9999;padding:10px 18px;border-radius:8px;font-size:13px;font-weight:500;color:#fff;box-shadow:0 4px 12px rgba(0,0,0,.2);display:none}
+  .toast.show{display:block}.toast.ok{background:#16a34a}.toast.err{background:#dc2626}
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ntabs">
+  <button class="ntab active" onclick="switchTab('channels',this)">📡 Channels</button>
+  <button class="ntab"        onclick="switchTab('rules',this)">⚙️ Alert Rules</button>
+  <button class="ntab"        onclick="switchTab('history',this)">📋 Send History</button>
+</div>
+
+<!-- Channels Tab -->
+<div class="npanel active" id="npanel-channels">
+
+  <div style="margin-bottom:16px">
+    <h3 style="font-size:14px;font-weight:700;color:var(--navy);margin:0 0 4px">Notification Channels</h3>
+    <p style="font-size:12px;color:var(--muted);margin:0">Configure where alerts are sent when AI Agents detect database problems.</p>
+  </div>
+
+  <!-- Channel selector cards -->
+  <div class="ch-grid" id="chGrid"></div>
+
+  <!-- Config form (changes per channel) -->
+  <div id="chForm"></div>
+</div>
+
+<!-- Alert Rules Tab -->
+<div class="npanel" id="npanel-rules">
+  <div class="form-section">
+    <h4>When to send notifications</h4>
+    <div class="toggle-row">
+      <div><div class="toggle-label">Agent finds a problem</div><div class="toggle-sub">Triggers when output contains keywords like "blocking", "ERROR", "lag", "full"</div></div>
+      <label class="sw"><input type="checkbox" id="rule_problem" onchange="saveRules()"><span class="sw-sl"></span></label>
+    </div>
+    <div class="toggle-row">
+      <div><div class="toggle-label">Agent run fails</div><div class="toggle-sub">Triggers when an agent errors out or cannot connect</div></div>
+      <label class="sw"><input type="checkbox" id="rule_error" onchange="saveRules()"><span class="sw-sl"></span></label>
+    </div>
+    <div class="toggle-row">
+      <div><div class="toggle-label">Every successful agent run</div><div class="toggle-sub">Send a report even when no problems are found (verbose mode)</div></div>
+      <label class="sw"><input type="checkbox" id="rule_success" onchange="saveRules()"><span class="sw-sl"></span></label>
+    </div>
+  </div>
+  <div class="form-section">
+    <h4>Problem detection keywords</h4>
+    <p style="font-size:12px;color:var(--muted);margin:0 0 10px">Notifications trigger when agent output contains any of these patterns (regex supported)</p>
+    <div id="kwList" style="margin-bottom:10px"></div>
+    <div style="display:flex;gap:8px">
+      <input type="text" id="newKw" placeholder="Add keyword or regex…" style="flex:1;padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--bg);color:var(--text)">
+      <button class="btn btn-primary btn-sm" onclick="addKeyword()">+ Add</button>
+    </div>
+  </div>
+</div>
+
+<!-- History Tab -->
+<div class="npanel" id="npanel-history">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <h3 style="font-size:14px;font-weight:700;color:var(--navy);margin:0">Notification send history</h3>
+    <button class="btn btn-secondary btn-sm" onclick="loadHistory()">↺ Refresh</button>
+  </div>
+  <div id="historyList"><p style="color:var(--muted);font-size:13px">Loading…</p></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const CHANNELS = [
+  {id:'email',      icon:'📧', label:'Email (SMTP)'},
+  {id:'teams',      icon:'💼', label:'MS Teams'},
+  {id:'slack',      icon:'💬', label:'Slack'},
+  {id:'bmc_proactive',icon:'🔴',label:'BMC ProactiveNet'},
+  {id:'webhook',    icon:'🔗', label:'Webhook'},
+];
+
+let cfg = {}, activeCh = 'email';
+
+function toast(msg, ok=true){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.className='toast show '+(ok?'ok':'err');
+  setTimeout(()=>t.className='toast',3000);
+}
+
+async function api(method, path, body=null){
+  const opts={method,credentials:'include',headers:{'Content-Type':'application/json'}};
+  if(body) opts.body=JSON.stringify(body);
+  const r=await fetch('/api'+path,opts); return r.json();
+}
+
+async function loadConfig(){
+  const d=await api('GET','/notifications/config');
+  cfg=d; renderChannelCards(); renderForm(activeCh); loadRules();
+}
+
+function switchTab(name,btn){
+  document.querySelectorAll('.ntab').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.npanel').forEach(p=>p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('npanel-'+name).classList.add('active');
+  if(name==='history') loadHistory();
+}
+
+function renderChannelCards(){
+  document.getElementById('chGrid').innerHTML = CHANNELS.map(ch=>{
+    const conf = cfg[ch.id]||{};
+    const enabled = conf.enabled;
+    const hasCfg  = isConfigured(ch.id, conf);
+    let status, cls='ch-card';
+    if(enabled){status='<span class="st-on">● Enabled</span>';cls+=' configured';}
+    else if(hasCfg){status='<span class="st-cfg">Configured</span>';}
+    else{status='<span class="st-off">Not configured</span>';}
+    if(ch.id===activeCh) cls+=' active-ch';
+    return `<div class="${cls}" onclick="selectChannel('${ch.id}')">
+      <div class="ch-icon">${ch.icon}</div>
+      <div class="ch-name">${ch.label}</div>
+      <div class="ch-status">${status}</div>
+    </div>`;
+  }).join('');
+}
+
+function isConfigured(id, conf){
+  if(id==='email')   return !!(conf.smtp_host && conf.smtp_user);
+  if(id==='teams')   return !!conf.webhook_url;
+  if(id==='slack')   return !!conf.webhook_url;
+  if(id==='bmc_proactive') return !!(conf.server_url && conf.api_key);
+  if(id==='webhook') return !!conf.url;
+  return false;
+}
+
+function selectChannel(id){ activeCh=id; renderChannelCards(); renderForm(id); }
+
+function renderForm(id){
+  const conf = cfg[id]||{};
+  const forms = {
+    email: `
+      <div class="form-section">
+        <h4>📧 Email / SMTP Configuration</h4>
+        <div class="field-row"><div class="fld"><label>SMTP Host</label><input id="smtp_host" value="${conf.smtp_host||''}"></div><div class="fld"><label>Port</label><input id="smtp_port" type="number" value="${conf.smtp_port||587}"></div></div>
+        <div class="field-row"><div class="fld"><label>SMTP Username</label><input id="smtp_user" value="${conf.smtp_user||''}"></div><div class="fld"><label>SMTP Password</label><input id="smtp_password" type="password" value="${conf.smtp_password||''}"></div></div>
+        <div class="field-row"><div class="fld"><label>From Address</label><input id="from_address" value="${conf.from_address||''}"></div><div class="fld"><label>From Name</label><input id="from_name" value="${conf.from_name||'dbadeeds.ai'}"></div></div>
+        <div class="field-row single"><div class="fld"><label>Default Recipients (comma-separated)</label><input id="default_recipients" value="${conf.default_recipients||''}"></div></div>
+        <div class="field-row single"><div class="fld"><label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="use_tls" ${conf.use_tls!==false?'checked':''}> Use TLS/STARTTLS (port 587)</label></div></div>
+        <div class="test-bar">
+          <label class="sw"><input type="checkbox" id="ch_enabled" ${conf.enabled?'checked':''} onchange="toggleChannel('email')"><span class="sw-sl"></span></label>
+          <span style="font-size:13px;color:var(--text);flex:1">Enable Email Notifications</span>
+          <button class="btn btn-secondary btn-sm" onclick="testChannel('email')">✉️ Send Test</button>
+          <button class="btn btn-primary btn-sm" onclick="saveChannel('email')">💾 Save</button>
+        </div>
+      </div>`,
+    teams: `
+      <div class="form-section">
+        <h4>💼 Microsoft Teams — Incoming Webhook</h4>
+        <p style="font-size:12px;color:var(--muted);margin:0 0 12px">In Teams: Channel → … → Connectors → Incoming Webhook → Copy URL</p>
+        <div class="field-row single"><div class="fld"><label>Webhook URL</label><input id="webhook_url" value="${conf.webhook_url||''}" placeholder="https://outlook.office.com/webhook/..."></div></div>
+        <div class="field-row single"><div class="fld"><label>Channel Name (display only)</label><input id="channel_name" value="${conf.channel_name||''}" placeholder="e.g. #dba-alerts"></div></div>
+        <div class="test-bar">
+          <label class="sw"><input type="checkbox" id="ch_enabled" ${conf.enabled?'checked':''} onchange="toggleChannel('teams')"><span class="sw-sl"></span></label>
+          <span style="font-size:13px;color:var(--text);flex:1">Enable Teams Notifications</span>
+          <button class="btn btn-secondary btn-sm" onclick="testChannel('teams')">💼 Send Test</button>
+          <button class="btn btn-primary btn-sm" onclick="saveChannel('teams')">💾 Save</button>
+        </div>
+      </div>`,
+    slack: `
+      <div class="form-section">
+        <h4>💬 Slack — Incoming Webhook</h4>
+        <p style="font-size:12px;color:var(--muted);margin:0 0 12px">In Slack: Apps → Incoming Webhooks → Add → Copy Webhook URL</p>
+        <div class="field-row single"><div class="fld"><label>Webhook URL</label><input id="webhook_url" value="${conf.webhook_url||''}" placeholder="https://hooks.slack.com/services/..."></div></div>
+        <div class="field-row single"><div class="fld"><label>Channel</label><input id="channel" value="${conf.channel||'#dba-alerts'}" placeholder="#dba-alerts"></div></div>
+        <div class="test-bar">
+          <label class="sw"><input type="checkbox" id="ch_enabled" ${conf.enabled?'checked':''} onchange="toggleChannel('slack')"><span class="sw-sl"></span></label>
+          <span style="font-size:13px;color:var(--text);flex:1">Enable Slack Notifications</span>
+          <button class="btn btn-secondary btn-sm" onclick="testChannel('slack')">💬 Send Test</button>
+          <button class="btn btn-primary btn-sm" onclick="saveChannel('slack')">💾 Save</button>
+        </div>
+      </div>`,
+    bmc_proactive: `
+      <div class="form-section">
+        <h4>🔴 BMC ProactiveNet / TrueSight Operations Management</h4>
+        <div class="field-row single"><div class="fld"><label>Server URL</label><input id="server_url" value="${conf.server_url||''}" placeholder="https://tsps.internal:443"></div></div>
+        <div class="field-row"><div class="fld"><label>API Key</label><input id="api_key" type="password" value="${conf.api_key||''}"></div><div class="fld"><label>Cell Name</label><input id="cell_name" value="${conf.cell_name||'dbadeeds'}" placeholder="dbadeeds"></div></div>
+        <div style="margin-top:12px;font-size:12px;font-weight:600;color:var(--muted);margin-bottom:6px">Severity Mapping</div>
+        <div class="field-row triple">
+          <div class="fld"><label>CRITICAL maps to</label><select id="sev_critical"><option>CRITICAL</option><option>MAJOR</option><option>MINOR</option></select></div>
+          <div class="fld"><label>WARNING maps to</label><select id="sev_warning"><option>CRITICAL</option><option>MAJOR</option><option selected>MINOR</option></select></div>
+          <div class="fld"><label>INFO maps to</label><select id="sev_info"><option>MAJOR</option><option>MINOR</option><option selected>OK</option></select></div>
+        </div>
+        <div class="test-bar">
+          <label class="sw"><input type="checkbox" id="ch_enabled" ${conf.enabled?'checked':''} onchange="toggleChannel('bmc_proactive')"><span class="sw-sl"></span></label>
+          <span style="font-size:13px;color:var(--text);flex:1">Enable BMC ProactiveNet</span>
+          <button class="btn btn-secondary btn-sm" onclick="testChannel('bmc_proactive')">🔴 Test Event</button>
+          <button class="btn btn-primary btn-sm" onclick="saveChannel('bmc_proactive')">💾 Save</button>
+        </div>
+      </div>`,
+    webhook: `
+      <div class="form-section">
+        <h4>🔗 Generic Webhook</h4>
+        <div class="field-row single"><div class="fld"><label>URL</label><input id="url" value="${conf.url||''}" placeholder="https://your-system.internal/webhook"></div></div>
+        <div class="field-row"><div class="fld"><label>Method</label><select id="method"><option ${conf.method==='POST'?'selected':''}>POST</option><option ${conf.method==='GET'?'selected':''}>GET</option></select></div><div class="fld"><label>Secret Header Value</label><input id="secret" type="password" value="${conf.secret||''}"></div></div>
+        <div class="test-bar">
+          <label class="sw"><input type="checkbox" id="ch_enabled" ${conf.enabled?'checked':''} onchange="toggleChannel('webhook')"><span class="sw-sl"></span></label>
+          <span style="font-size:13px;color:var(--text);flex:1">Enable Webhook</span>
+          <button class="btn btn-secondary btn-sm" onclick="testChannel('webhook')">🔗 Test</button>
+          <button class="btn btn-primary btn-sm" onclick="saveChannel('webhook')">💾 Save</button>
+        </div>
+      </div>`
+  };
+  document.getElementById('chForm').innerHTML = forms[id]||'';
+}
+
+function getFormValues(id){
+  const val = sel => document.getElementById(sel)?.value||'';
+  const chk = sel => document.getElementById(sel)?.checked;
+  if(id==='email') return {smtp_host:val('smtp_host'),smtp_port:parseInt(val('smtp_port'))||587,smtp_user:val('smtp_user'),smtp_password:val('smtp_password'),from_address:val('from_address'),from_name:val('from_name'),default_recipients:val('default_recipients'),use_tls:chk('use_tls')};
+  if(id==='teams') return {webhook_url:val('webhook_url'),channel_name:val('channel_name')};
+  if(id==='slack') return {webhook_url:val('webhook_url'),channel:val('channel')};
+  if(id==='bmc_proactive') return {server_url:val('server_url'),api_key:val('api_key'),cell_name:val('cell_name'),severity_map:{CRITICAL:val('sev_critical'),WARNING:val('sev_warning'),INFO:val('sev_info')}};
+  if(id==='webhook') return {url:val('url'),method:val('method'),secret:val('secret')};
+  return {};
+}
+
+async function saveChannel(id){
+  const vals = getFormValues(id);
+  const d    = await api('POST','/notifications/config',{[id]:vals});
+  if(d.ok){toast('Settings saved'); await loadConfig();}
+  else toast(d.error||'Save failed',false);
+}
+
+async function toggleChannel(id){
+  const enabled = document.getElementById('ch_enabled').checked;
+  const d = await api('POST','/notifications/config',{[id]:{enabled}});
+  if(d.ok){ cfg[id] = {...(cfg[id]||{}), enabled}; renderChannelCards(); }
+}
+
+async function testChannel(id){
+  const vals = getFormValues(id);
+  const btn  = event.target;
+  btn.textContent='Testing…'; btn.disabled=true;
+  const d = await api('POST',`/notifications/test/${id}`,vals);
+  btn.disabled=false;
+  if(d.ok){ toast('✅ '+d.message); btn.textContent='✅ Sent'; }
+  else { toast('❌ '+d.message,false); btn.textContent='❌ Failed'; }
+  setTimeout(()=>renderForm(id),2000);
+}
+
+function loadRules(){
+  const r = cfg.alert_rules||{};
+  const set = (id,val) => { const el=document.getElementById(id); if(el) el.checked=val; };
+  set('rule_problem', r.notify_on_problem_found!==false);
+  set('rule_error',   r.notify_on_agent_error!==false);
+  set('rule_success', r.notify_on_agent_success===true);
+  renderKeywords(r.problem_keywords||[]);
+}
+
+function renderKeywords(kws){
+  document.getElementById('kwList').innerHTML = kws.map((kw,i)=>
+    `<span class="badge-kw">${kw} <span style="cursor:pointer;margin-left:4px" onclick="removeKw(${i})">×</span></span>`
+  ).join('');
+}
+
+async function saveRules(){
+  const kws = [...document.querySelectorAll('.badge-kw')].map(el=>el.textContent.replace('×','').trim());
+  const rules = {
+    notify_on_problem_found: document.getElementById('rule_problem')?.checked!==false,
+    notify_on_agent_error:   document.getElementById('rule_error')?.checked!==false,
+    notify_on_agent_success: document.getElementById('rule_success')?.checked===true,
+    problem_keywords: kws,
+  };
+  const d = await api('POST','/notifications/config',{alert_rules:rules});
+  if(d.ok) toast('Alert rules saved');
+}
+
+async function addKeyword(){
+  const inp = document.getElementById('newKw');
+  const kw  = inp.value.trim();
+  if(!kw) return;
+  const current = cfg.alert_rules?.problem_keywords||[];
+  if(!current.includes(kw)){
+    current.push(kw);
+    const d = await api('POST','/notifications/config',{alert_rules:{...cfg.alert_rules,problem_keywords:current}});
+    if(d.ok){ cfg.alert_rules = {...(cfg.alert_rules||{}), problem_keywords:current}; renderKeywords(current); inp.value=''; }
+  }
+}
+
+async function removeKw(idx){
+  const kws = [...(cfg.alert_rules?.problem_keywords||[])];
+  kws.splice(idx,1);
+  const d = await api('POST','/notifications/config',{alert_rules:{...cfg.alert_rules,problem_keywords:kws}});
+  if(d.ok){ cfg.alert_rules.problem_keywords=kws; renderKeywords(kws); }
+}
+
+async function loadHistory(){
+  document.getElementById('historyList').innerHTML = '<p style="color:var(--muted);font-size:13px">Notification send history is stored in agent run logs. See Agent Monitor for full run history.</p>';
+}
+
+loadConfig();
+</script>
+{% endblock %}

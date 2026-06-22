@@ -1,0 +1,285 @@
+{% extends "base.html" %}
+{% block title %}Activity Logs — dbadeeds.ai{% endblock %}
+{% block page_title %}📋 Activity Logs{% endblock %}
+{% set active_page = 'activity_logs' %}
+
+{% block head %}
+<style>
+  /* ── Stats bar ─────────────────────────────────────────────── */
+  .log-stats { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:10px; margin-bottom:20px; }
+  .log-stat  { background:var(--surface); border:1px solid var(--border); border-radius:8px; padding:12px 14px; text-align:center; }
+  .log-stat .val { font-family:var(--mono); font-size:22px; font-weight:700; color:var(--navy); }
+  .log-stat .lbl { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-top:3px; }
+  .log-stat .today { font-size:10px; color:var(--success); margin-top:2px; }
+
+  /* ── Tab bar ────────────────────────────────────────────────── */
+  .log-tabs { display:flex; gap:0; border-bottom:2px solid var(--border); margin-bottom:18px; flex-wrap:wrap; }
+  .log-tab  { padding:9px 16px; font-size:12px; font-weight:600; cursor:pointer;
+    border-bottom:2px solid transparent; margin-bottom:-2px;
+    color:var(--muted); transition:all .15s; background:none; border-top:none; border-left:none; border-right:none; }
+  .log-tab:hover  { color:var(--text); }
+  .log-tab.active { color:var(--accent); border-bottom-color:var(--accent); }
+
+  /* ── Toolbar ─────────────────────────────────────────────────── */
+  .log-toolbar { display:flex; gap:10px; align-items:center; margin-bottom:14px; flex-wrap:wrap; }
+  .log-toolbar input { flex:1; min-width:200px; }
+
+  /* ── Entry list ─────────────────────────────────────────────── */
+  .log-entry { border:1px solid var(--border); border-radius:8px; background:var(--surface);
+    padding:10px 14px; margin-bottom:6px; font-size:12px; transition:box-shadow .1s; }
+  .log-entry:hover { box-shadow:var(--shadow); }
+  .log-entry-header { display:flex; gap:10px; align-items:baseline; flex-wrap:wrap; }
+  .log-ts   { font-family:var(--mono); font-size:11px; color:var(--muted); white-space:nowrap; }
+  .log-user { font-weight:600; color:var(--accent); }
+  .log-type { font-size:10px; font-weight:700; padding:2px 7px; border-radius:4px; text-transform:uppercase; }
+  .type-login     { background:#dbeafe; color:#1e40af; }
+  .type-logout    { background:#f3f4f6; color:#6b7280; }
+  .type-page_view { background:#fef3c7; color:#92400e; }
+  .type-ai_chat   { background:#f0fdf4; color:#166534; }
+  .type-sql       { background:#faf5ff; color:#6b21a8; }
+  .type-safety    { background:#fef2f2; color:#991b1b; }
+  .type-error     { background:#fef2f2; color:#991b1b; }
+  .type-feature   { background:#ecfdf5; color:#065f46; }
+  .type-db_conn   { background:#eff6ff; color:#1d4ed8; }
+  .type-default   { background:#f3f4f6; color:#374151; }
+
+  .log-details { margin-top:6px; display:flex; gap:12px; flex-wrap:wrap; }
+  .log-kv      { font-size:11px; color:var(--muted); }
+  .log-kv strong { color:var(--text); }
+  .log-full    { display:none; margin-top:8px; background:var(--bg); border-radius:6px;
+    padding:10px; font-family:var(--mono); font-size:11px; white-space:pre-wrap; word-break:break-all;
+    max-height:300px; overflow-y:auto; border:1px solid var(--border); color:var(--text); }
+  .log-entry.expanded .log-full { display:block; }
+
+  .log-empty { text-align:center; padding:50px; color:var(--muted); }
+  .log-pager { display:flex; gap:8px; align-items:center; justify-content:center; margin-top:16px; }
+  .badge-success { background:#d1fae5; color:#065f46; font-size:10px; padding:1px 6px; border-radius:3px; }
+  .badge-fail    { background:#fee2e2; color:#991b1b; font-size:10px; padding:1px 6px; border-radius:3px; }
+
+  .spinner-inline { display:inline-block; width:14px; height:14px;
+    border:2px solid var(--border); border-top-color:var(--accent);
+    border-radius:50%; animation:spin .6s linear infinite; vertical-align:middle; }
+  @keyframes spin { to { transform:rotate(360deg) } }
+
+  .clear-btn { color:var(--danger); border-color:var(--danger); }
+  .clear-btn:hover { background:#fef2f2; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Stats row -->
+<div class="log-stats" id="statsRow">
+  <div class="log-stat"><div class="val" id="stat-logins">–</div><div class="lbl">Logins</div><div class="today" id="stat-logins-t"></div></div>
+  <div class="log-stat"><div class="val" id="stat-sql">–</div><div class="lbl">SQL Runs</div><div class="today" id="stat-sql-t"></div></div>
+  <div class="log-stat"><div class="val" id="stat-ai">–</div><div class="lbl">AI Chats</div><div class="today" id="stat-ai-t"></div></div>
+  <div class="log-stat"><div class="val" id="stat-pages">–</div><div class="lbl">Page Views</div><div class="today" id="stat-pages-t"></div></div>
+  <div class="log-stat"><div class="val" id="stat-errors" style="color:var(--danger)">–</div><div class="lbl">Errors</div><div class="today" id="stat-errors-t"></div></div>
+  <div class="log-stat"><div class="val" id="stat-safety" style="color:var(--warning)">–</div><div class="lbl">Safety Blocks</div><div class="today" id="stat-safety-t"></div></div>
+</div>
+
+<!-- Log file tabs -->
+<div class="log-tabs" id="logTabs">
+  <button class="log-tab active" data-key="activity"      onclick="switchLog('activity',this)">📊 Activity</button>
+  <button class="log-tab"        data-key="login"         onclick="switchLog('login',this)">🔐 Login</button>
+  <button class="log-tab"        data-key="sql"           onclick="switchLog('sql',this)">💾 SQL</button>
+  <button class="log-tab"        data-key="ai_chat"       onclick="switchLog('ai_chat',this)">🤖 AI Chat</button>
+  <button class="log-tab"        data-key="page_views"    onclick="switchLog('page_views',this)">👁 Page Views</button>
+  <button class="log-tab"        data-key="db_connections" onclick="switchLog('db_connections',this)">🔌 DB Conn</button>
+  <button class="log-tab"        data-key="safety_blocks" onclick="switchLog('safety_blocks',this)">🛡 Safety</button>
+  <button class="log-tab"        data-key="errors"        onclick="switchLog('errors',this)">❌ Errors</button>
+  <button class="log-tab"        data-key="detailed"      onclick="switchLog('detailed',this)">🔍 Detailed</button>
+</div>
+
+<!-- Toolbar -->
+<div class="log-toolbar">
+  <input class="form-input" id="searchInput" placeholder="🔍 Search entries…" oninput="debounceSearch()" style="max-width:320px"/>
+  <select class="form-select" id="limitSelect" onchange="loadLog()" style="width:110px">
+    <option value="50">50 entries</option>
+    <option value="100">100 entries</option>
+    <option value="200" selected>200 entries</option>
+    <option value="500">500 entries</option>
+  </select>
+  <div style="flex:1"></div>
+  <button class="btn btn-secondary" onclick="loadLog()">🔄 Refresh</button>
+  <button class="btn btn-secondary clear-btn" onclick="confirmClear()">🗑️ Clear Log</button>
+</div>
+
+<!-- Entries -->
+<div id="logEntries">
+  <div class="log-empty"><div class="spinner-inline"></div> Loading…</div>
+</div>
+
+<!-- Pager -->
+<div class="log-pager" id="pager" style="display:none">
+  <button class="btn btn-secondary btn-sm" id="prevBtn" onclick="prevPage()">← Prev</button>
+  <span id="pageInfo" style="font-size:12px;color:var(--muted)"></span>
+  <button class="btn btn-secondary btn-sm" id="nextBtn" onclick="nextPage()">Next →</button>
+</div>
+
+<script>
+let currentLog   = 'activity';
+let currentOffset = 0;
+let currentTotal  = 0;
+let searchTimer   = null;
+
+document.addEventListener('DOMContentLoaded', () => {
+  loadStats();
+  loadLog();
+});
+
+function switchLog(key, btn) {
+  currentLog    = key;
+  currentOffset = 0;
+  document.querySelectorAll('.log-tab').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('searchInput').value = '';
+  loadLog();
+}
+
+function debounceSearch() {
+  clearTimeout(searchTimer);
+  searchTimer = setTimeout(() => { currentOffset = 0; loadLog(); }, 350);
+}
+
+async function loadLog() {
+  const limit  = parseInt(document.getElementById('limitSelect').value);
+  const search = document.getElementById('searchInput').value.trim();
+  const url    = `/api/logs/${currentLog}?limit=${limit}&offset=${currentOffset}` +
+                 (search ? `&search=${encodeURIComponent(search)}` : '');
+
+  document.getElementById('logEntries').innerHTML =
+    '<div class="log-empty"><div class="spinner-inline"></div> Loading…</div>';
+
+  const d = await api('GET', url.replace('/api', ''));
+  if (!d) return;
+
+  currentTotal = d.total;
+  renderEntries(d.entries);
+  renderPager(limit);
+}
+
+function renderEntries(entries) {
+  const el = document.getElementById('logEntries');
+  if (!entries.length) {
+    el.innerHTML = '<div class="log-empty">📭 No log entries found.</div>';
+    return;
+  }
+  el.innerHTML = entries.map((e, i) => buildEntry(e, i)).join('');
+}
+
+function buildEntry(e, idx) {
+  const ts       = e.timestamp || e.time || '';
+  const user     = e.app_username || e.app_user || e.username || '—';
+  const atype    = e.activity_type || e.action || '—';
+  const typeKey  = (atype || '').toLowerCase().replace(/\s+/g,'_');
+  const typeCls  = {
+    login:'type-login', logout:'type-logout', page_view:'type-page_view',
+    ai_chat:'type-ai_chat', sql_execution:'type-sql', safety_block:'type-safety',
+    error:'type-error', feature_usage:'type-feature', database_connection:'type-db_conn'
+  }[typeKey] || 'type-default';
+
+  // Key detail fields
+  const details = [];
+  if (e.page)          details.push(`<span class="log-kv"><strong>Page:</strong> ${esc(e.page)}</span>`);
+  if (e.question)      details.push(`<span class="log-kv"><strong>Q:</strong> ${esc(String(e.question).slice(0,80))}…</span>`);
+  if (e.sql || e.blocked_sql)
+    details.push(`<span class="log-kv"><strong>SQL:</strong> ${esc(String(e.sql||e.blocked_sql).slice(0,80))}…</span>`);
+  if (e.details)       details.push(`<span class="log-kv">${esc(String(e.details).slice(0,100))}</span>`);
+  if (e.error_message) details.push(`<span class="log-kv" style="color:var(--danger)">⚠ ${esc(String(e.error_message).slice(0,100))}</span>`);
+  if (e.db_type)       details.push(`<span class="log-kv"><strong>DB:</strong> ${esc(e.db_type)}</span>`);
+  if (e.client_ip && e.client_ip !== 'server')
+    details.push(`<span class="log-kv"><strong>IP:</strong> ${esc(e.client_ip)}</span>`);
+
+  const successBadge = 'success' in e
+    ? `<span class="${e.success ? 'badge-success' : 'badge-fail'}">${e.success ? '✓ OK' : '✗ Fail'}</span>` : '';
+
+  const rawJson = JSON.stringify(e, null, 2);
+
+  return `<div class="log-entry" id="le_${idx}" onclick="toggleExpand(${idx})">
+    <div class="log-entry-header">
+      <span class="log-ts">${esc(ts.slice(0,19).replace('T',' '))}</span>
+      <span class="log-user">${esc(user)}</span>
+      <span class="log-type ${typeCls}">${esc(atype)}</span>
+      ${successBadge}
+    </div>
+    ${details.length ? `<div class="log-details">${details.join('')}</div>` : ''}
+    <div class="log-full">${esc(rawJson)}</div>
+  </div>`;
+}
+
+function toggleExpand(idx) {
+  document.getElementById('le_'+idx).classList.toggle('expanded');
+}
+
+function renderPager(limit) {
+  const pager = document.getElementById('pager');
+  if (currentTotal <= limit) { pager.style.display = 'none'; return; }
+  pager.style.display = 'flex';
+  const page = Math.floor(currentOffset / limit) + 1;
+  const pages = Math.ceil(currentTotal / limit);
+  document.getElementById('pageInfo').textContent = `Page ${page} / ${pages}  (${currentTotal} entries)`;
+  document.getElementById('prevBtn').disabled = currentOffset === 0;
+  document.getElementById('nextBtn').disabled = currentOffset + limit >= currentTotal;
+}
+
+function prevPage() {
+  const limit = parseInt(document.getElementById('limitSelect').value);
+  currentOffset = Math.max(0, currentOffset - limit);
+  loadLog();
+}
+
+function nextPage() {
+  const limit = parseInt(document.getElementById('limitSelect').value);
+  if (currentOffset + limit < currentTotal) {
+    currentOffset += limit;
+    loadLog();
+  }
+}
+
+async function loadStats() {
+  const d = await api('GET', '/logs/stats');
+  if (!d) return;
+  const s = d.stats || {};
+  const set = (id, key) => {
+    const el = document.getElementById('stat-'+id);
+    const et = document.getElementById('stat-'+id+'-t');
+    if (el && s[key]) {
+      el.textContent = s[key].total.toLocaleString();
+      if (et && s[key].today) et.textContent = `+${s[key].today} today`;
+    }
+  };
+  set('logins',  'login');
+  set('sql',     'sql');
+  set('ai',      'ai_chat');
+  set('pages',   'page_views');
+  set('errors',  'errors');
+  set('safety',  'safety_blocks');
+}
+
+async function confirmClear() {
+  if (!confirm(`Clear all entries in the "${currentLog}" log? This cannot be undone.`)) return;
+  const res = await apiFetch(`/api/logs/${currentLog}`, 'DELETE', {});
+  if (res && res.ok) {
+    showToast(`${currentLog} log cleared`, 'success');
+    loadLog();
+    loadStats();
+  } else {
+    showToast('Failed to clear log', 'danger');
+  }
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// apiFetch — raw response helper for DELETE/clear operations
+async function apiFetch(url, method, body) {
+  const res = await fetch(url, { method, credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined });
+  if (res.status === 401) { window.location.href = '/login'; }
+  return res;
+}
+</script>
+{% endblock %}

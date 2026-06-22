@@ -1,0 +1,671 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>{% block title %}dbadeeds.ai{% endblock %}</title>
+
+  <!-- Inter font — exact match to Streamlit app -->
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;600&display=swap" rel="stylesheet"/>
+
+  <!-- HTMX -->
+  <script src="https://unpkg.com/htmx.org@2.0.4/dist/htmx.min.js" defer></script>
+
+  <style>
+    /* ══════════════════════════════════════════════════════════════
+       DESIGN TOKEN EXTRACTION — matches dbadeeds.ai Streamlit app
+       ══════════════════════════════════════════════════════════════
+       Sidebar:        white  #ffffff
+       Page bg:        #f5f7fa
+       Headers h1:     navy   #0C4A6E
+       Headers h2/h3:  #1F2937
+       Accent blue:    #0369A1
+       Active nav bg:  #E0F2FE
+       Active nav txt: #0369A1
+       CTA button:     orange #F97316 / hover #EA580C
+       Borders:        #E5E7EB
+       Muted text:     #6B7280 / #9CA3AF
+       Font:           Inter
+       Mono:           IBM Plex Mono
+    */
+
+    :root {
+      --bg:           #f5f7fa;
+      --surface:      #ffffff;
+      --border:       #E5E7EB;
+      --text:         #1F2937;
+      --text-muted:   #6B7280;
+      --text-subtle:  #9CA3AF;
+      --navy:         #0C4A6E;
+      --accent:       #0369A1;
+      --accent-light: #E0F2FE;
+      --orange:       #F97316;
+      --orange-hover: #EA580C;
+      --orange-shadow:rgba(249,115,22,.25);
+      --success:      #10B981;
+      --danger:       #EF4444;
+      --warning:      #F59E0B;
+      --sidebar-w:    260px;
+      --header-h:     56px;
+      --radius:       8px;
+      --shadow-sm:    0 1px 2px rgba(0,0,0,.05);
+      --shadow:       0 1px 3px rgba(0,0,0,.1), 0 1px 2px rgba(0,0,0,.06);
+      --shadow-md:    0 4px 6px rgba(0,0,0,.07), 0 2px 4px rgba(0,0,0,.05);
+      --font:         'Inter', sans-serif;
+      --mono:         'IBM Plex Mono', monospace;
+    }
+
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { height: 100%; font-family: var(--font); font-size: 14px; color: var(--text); background: var(--bg); line-height: 1.5; -webkit-font-smoothing: antialiased; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ══ App Shell ═══════════════════════════════════════════════ */
+    .app-shell { display: flex; height: 100vh; overflow: hidden; }
+
+    /* ══ Sidebar — white, clean, exact Streamlit match ══════════ */
+    .sidebar {
+      width: var(--sidebar-w);
+      flex-shrink: 0;
+      background: var(--surface);
+      border-right: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow-y: auto;
+    }
+
+    /* Brand */
+    .sidebar-brand {
+      padding: 24px 20px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 8px;
+    }
+    .sidebar-brand h1 {
+      color: var(--navy);
+      font-size: 18px;
+      font-weight: 700;
+      margin: 0;
+      line-height: 1.2;
+    }
+    .sidebar-brand p {
+      color: #64748B;
+      font-size: 12px;
+      margin: 4px 0 0;
+      font-weight: 400;
+    }
+
+    /* Nav section labels — #9CA3AF uppercase like Streamlit */
+    .sidebar-section-header {
+      color: var(--text-subtle);
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      padding: 20px 20px 8px;
+      margin: 0;
+    }
+
+    /* Nav items — match Streamlit radio group items */
+    .nav-group { padding: 0 12px; }
+    .nav-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 11px 14px;
+      border-radius: var(--radius);
+      color: var(--text-muted);
+      font-size: 14px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: background .15s, color .15s;
+      text-decoration: none;
+      margin-bottom: 2px;
+      border: none;
+      background: transparent;
+      width: 100%;
+      text-align: left;
+    }
+    .nav-item:hover { background: #F3F4F6; color: var(--text); text-decoration: none; }
+    .nav-item.active { background: var(--accent-light); color: var(--accent); font-weight: 600; }
+    .nav-item .nav-icon { width: 18px; text-align: center; font-size: 15px; }
+
+    /* Sidebar divider */
+    .sidebar-divider { height: 1px; background: var(--border); margin: 16px 0; }
+
+    /* Sidebar footer — ACCOUNT section */
+    .sidebar-footer { padding: 16px 20px; border-top: 1px solid var(--border); margin-top: auto; }
+    .sidebar-footer .caption { color: var(--text-subtle); font-size: 12px; margin-bottom: 4px; }
+
+    .user-pill {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 10px 12px;
+      background: #F9FAFB;
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      margin-bottom: 10px;
+    }
+    .user-avatar {
+      width: 32px; height: 32px; border-radius: 8px;
+      background: linear-gradient(135deg, var(--accent), #0284C7);
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; font-weight: 700; color: white; flex-shrink: 0;
+    }
+    .user-name { font-size: 13px; font-weight: 600; color: var(--text); }
+    .user-role { font-size: 11px; color: var(--text-muted); }
+
+    .btn-logout {
+      width: 100%; padding: 8px 14px;
+      background: transparent; border: 1px solid var(--border);
+      border-radius: 6px; color: var(--text-muted); font-size: 13px;
+      cursor: pointer; font-family: var(--font); transition: all .15s;
+    }
+    .btn-logout:hover { background: #FEF2F2; border-color: #FCA5A5; color: var(--danger); }
+
+    /* ══ Main area ══════════════════════════════════════════════ */
+    .main { flex: 1; display: flex; flex-direction: column; overflow: hidden; min-width: 0; }
+
+    .topbar {
+      height: var(--header-h); flex-shrink: 0;
+      background: var(--surface);
+      border-bottom: 1px solid var(--border);
+      display: flex; align-items: center;
+      padding: 0 24px;
+      justify-content: space-between;
+    }
+    .topbar-title { font-size: 16px; font-weight: 600; color: var(--navy); }
+    .status-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      background: #F0FDF4; border: 1px solid #BBF7D0;
+      border-radius: 20px; padding: 4px 12px;
+      font-size: 12px; color: #166534; font-weight: 500;
+    }
+    .status-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--success); animation: pulse 2s infinite; }
+    @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+    .page-content { flex: 1; overflow-y: auto; padding: 24px; }
+
+    /* ══ Page Section Headers — match Streamlit st.header ══════ */
+    .page-header {
+      margin-bottom: 20px;
+    }
+    .page-header h1 {
+      font-size: 22px; font-weight: 700; color: var(--navy);
+      display: flex; align-items: center; gap: 8px;
+    }
+    .page-header p { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+
+    /* ══ Cards ══════════════════════════════════════════════════ */
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      box-shadow: var(--shadow-sm);
+    }
+    .card-title {
+      font-size: 15px; font-weight: 600; color: var(--text);
+      margin-bottom: 16px; padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+    }
+    .card-grid   { display: grid; gap: 16px; }
+    .card-grid-2 { grid-template-columns: 1fr 1fr; }
+    .card-grid-3 { grid-template-columns: 1fr 1fr 1fr; }
+    .card-grid-4 { grid-template-columns: repeat(4, 1fr); }
+
+    /* ══ Metrics — match Streamlit st.metric ════════════════════ */
+    .metric-card { padding: 18px 20px; }
+    .metric-icon { font-size: 20px; margin-bottom: 8px; }
+    .metric-val { font-family: var(--mono); font-size: 26px; font-weight: 700; color: var(--navy); }
+    .metric-lbl { font-size: 12px; color: var(--text-muted); font-weight: 500; margin-top: 4px; }
+
+    /* ══ Tabs — exact Streamlit stTabs look ═════════════════════ */
+    .tabs-row {
+      display: flex; gap: 0;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 20px;
+    }
+    .tab-btn {
+      height: 44px; padding: 0 16px;
+      background: transparent; border: none;
+      color: var(--text-muted); font-size: 14px; font-weight: 500;
+      cursor: pointer; font-family: var(--font);
+      border-bottom: 2px solid transparent;
+      margin-bottom: -1px;
+      transition: color .15s, background .15s;
+    }
+    .tab-btn:hover   { background: #F9FAFB; color: var(--text); }
+    .tab-btn.active  { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; background: transparent; }
+    .tab-pane        { display: none; }
+    .tab-pane.active { display: block; }
+
+    /* ══ Buttons — orange CTA matches Streamlit stButton ════════ */
+    .btn {
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 8px 16px; border-radius: 6px;
+      font-size: 14px; font-weight: 500; font-family: var(--font);
+      cursor: pointer; border: none; transition: all .2s ease;
+      box-shadow: var(--shadow-sm);
+    }
+    .btn-primary {
+      background: var(--orange); color: white;
+    }
+    .btn-primary:hover {
+      background: var(--orange-hover);
+      box-shadow: 0 4px 6px var(--orange-shadow);
+    }
+    .btn-secondary {
+      background: var(--surface); color: var(--text);
+      border: 1px solid var(--border);
+    }
+    .btn-secondary:hover { background: #F3F4F6; }
+    .btn-danger    { background: var(--danger); color: white; }
+    .btn-danger:hover { background: #DC2626; }
+    .btn-sm        { padding: 5px 10px; font-size: 12px; }
+    .btn-full      { width: 100%; justify-content: center; }
+    .btn:disabled  { opacity: .5; cursor: not-allowed; }
+
+    /* ══ Forms ══════════════════════════════════════════════════ */
+    .form-group   { margin-bottom: 14px; }
+    .form-row     { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .form-label   { display: block; font-size: 13px; font-weight: 500; color: var(--text-muted); margin-bottom: 5px; }
+    .form-input, .form-select, .form-textarea {
+      width: 100%; padding: 9px 12px;
+      border: 1px solid var(--border); border-radius: 6px;
+      font-size: 14px; font-family: var(--font); color: var(--text);
+      background: var(--surface); transition: border .15s, box-shadow .15s;
+    }
+    .form-input:focus, .form-select:focus, .form-textarea:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(3,105,161,.15);
+    }
+    .form-textarea { min-height: 100px; resize: vertical; font-family: var(--mono); font-size: 13px; }
+
+    /* ══ Alerts — match st.info / st.success / st.warning / st.error */
+    .alert { padding: 12px 16px; border-radius: var(--radius); font-size: 13px; margin-bottom: 12px; border: 1px solid; }
+    .alert-info    { background: #EFF6FF; border-color: #BFDBFE; color: #1E40AF; }
+    .alert-success { background: #F0FDF4; border-color: #BBF7D0; color: #166534; }
+    .alert-warn    { background: #FFFBEB; border-color: #FDE68A; color: #92400E; border-left: 4px solid var(--warning); }
+    .alert-danger  { background: #FEF2F2; border-color: #FCA5A5; color: #991B1B; border-left: 4px solid var(--danger); }
+
+    /* ══ Table — match st.dataframe ════════════════════════════ */
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th {
+      font-size: 12px; font-weight: 600; color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: .05em;
+      padding: 8px 12px; border-bottom: 1px solid var(--border);
+      background: #F9FAFB; text-align: left; white-space: nowrap;
+    }
+    td { padding: 10px 12px; border-bottom: 1px solid var(--border); color: var(--text); }
+    tr:hover td { background: #F9FAFB; }
+    .mono-cell { font-family: var(--mono); font-size: 12px; }
+
+    /* ══ Badges ═════════════════════════════════════════════════ */
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .badge-green  { background: #DCFCE7; color: #166534; }
+    .badge-red    { background: #FEE2E2; color: #991B1B; }
+    .badge-yellow { background: #FEF3C7; color: #92400E; }
+    .badge-blue   { background: #DBEAFE; color: #1E40AF; }
+    .badge-purple { background: #F3E8FF; color: #6B21A8; }
+    .badge-gray   { background: #F1F5F9; color: #475569; }
+    .badge-orange { background: #FFF7ED; color: #C2410C; border: 1px solid #FED7AA; }
+
+    /* ══ Permission pills — exact user_management.py colors ═════ */
+    .perm-pill {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: #F0F9FF; border: 1px solid #BAE6FD; color: #0369A1;
+      border-radius: 4px; font-size: 11px; font-weight: 500; padding: 2px 8px;
+    }
+    .perm-pill.admin-scope { background: #FEF3C7; border-color: #FDE68A;  color: #92400E; }
+    .perm-pill.ai-scope    { background: #F0FDF4; border-color: #BBF7D0;  color: #166534; }
+    .perm-pill.db-scope    { background: #FAF5FF; border-color: #E9D5FF;  color: #6B21A8; }
+
+    /* ══ Status dots ════════════════════════════════════════════ */
+    .status-dot-sm { display: inline-flex; align-items: center; gap: 5px; font-size: 12px; color: var(--text-muted); }
+    .dot { width: 7px; height: 7px; border-radius: 50%; display: inline-block; }
+    .dot.on  { background: var(--success); box-shadow: 0 0 0 2px rgba(16,185,129,.2); }
+    .dot.off { background: #D1D5DB; }
+
+    /* ══ Expander / details — match stExpander ══════════════════ */
+    details {
+      border: 1px solid var(--border); border-radius: var(--radius);
+      background: var(--surface); margin-bottom: 8px; overflow: hidden;
+    }
+    details summary {
+      padding: 12px 16px; cursor: pointer; font-size: 14px; font-weight: 500;
+      color: var(--text); list-style: none; transition: background .15s;
+      display: flex; align-items: center; justify-content: space-between;
+    }
+    details summary:hover { background: #F9FAFB; }
+    details summary::after { content: '›'; font-size: 18px; color: var(--text-muted); transition: transform .2s; }
+    details[open] summary::after { transform: rotate(90deg); }
+    details .details-body { padding: 16px; border-top: 1px solid var(--border); }
+
+    /* ══ Code editor textarea ════════════════════════════════════ */
+    .sql-editor {
+      width: 100%; min-height: 140px;
+      font-family: var(--mono); font-size: 13px; line-height: 1.6;
+      background: #0F172A; color: #E2E8F0;
+      border: 1px solid #334155; border-radius: var(--radius);
+      padding: 14px; resize: vertical;
+      transition: border .15s;
+    }
+    .sql-editor:focus { outline: none; border-color: var(--accent); }
+
+    /* ══ Spinner / loading ═══════════════════════════════════════ */
+    .spinner {
+      width: 20px; height: 20px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin .6s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ══ Modal ══════════════════════════════════════════════════ */
+    .modal-overlay {
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,.45);
+      z-index: 1000; align-items: center; justify-content: center;
+    }
+    .modal-overlay.open { display: flex; }
+    .modal {
+      background: var(--surface); border-radius: 12px; padding: 28px;
+      width: 100%; max-width: 520px; box-shadow: 0 20px 60px rgba(0,0,0,.2);
+      max-height: 90vh; overflow-y: auto; position: relative;
+    }
+    .modal h3 { font-size: 16px; font-weight: 600; color: var(--navy); margin-bottom: 20px; }
+    .modal-close { position: absolute; top: 14px; right: 16px; background: none; border: none; font-size: 20px; cursor: pointer; color: var(--text-muted); }
+    .modal-close:hover { color: var(--danger); }
+
+    /* ══ Responsive ════════════════════════════════════════════ */
+    @media (max-width: 768px) {
+      .sidebar { display: none; }
+      .card-grid-4, .card-grid-3, .card-grid-2 { grid-template-columns: 1fr; }
+      .form-row { grid-template-columns: 1fr; }
+    }
+
+    /* ══ Scrollbars (subtle, like Streamlit) ════════════════════ */
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #D1D5DB; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #9CA3AF; }
+  </style>
+  {% block head %}{% endblock %}
+</head>
+<body>
+<div class="app-shell">
+
+  <!-- ══ Sidebar ══════════════════════════════════════════════ -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <h1>🤖 dbadeeds.ai</h1>
+      <p>AI Database Intelligence</p>
+    </div>
+
+    <!-- OVERVIEW -->
+    <p class="sidebar-section-header">Overview</p>
+    <div class="nav-group">
+      {% if 'dashboard' in permissions %}
+      <a href="/dashboard" class="nav-item {% if active_page=='dashboard' %}active{% endif %}">
+        <span class="nav-icon">📊</span> Dashboard
+      </a>
+      {% endif %}
+
+      {% if 'llm_settings' in permissions %}
+      <a href="/llm-settings" class="nav-item {% if active_page=='llm_settings' %}active{% endif %}">
+        <span class="nav-icon">⚙️</span> LLM Settings
+      </a>
+      {% endif %}
+
+      {% if 'user_management' in permissions %}
+      <a href="/users" class="nav-item {% if active_page=='user_management' %}active{% endif %}">
+        <span class="nav-icon">👥</span> User Management
+      </a>
+      {% endif %}
+      {% if 'notifications' in permissions or 'user_management' in permissions %}
+      <a href="/notifications" class="nav-item {% if active_page=='notifications' %}active{% endif %}">
+        <span class="nav-icon">🔔</span> Notifications
+      </a>
+      {% endif %}
+      {% if 'user_management' in permissions %}
+      <a href="/logs" class="nav-item {% if active_page=='activity_logs' %}active{% endif %}">
+        <span class="nav-icon">📋</span> Activity Logs
+      </a>
+      <a href="/guardrails" class="nav-item {% if active_page=='guardrails' %}active{% endif %}">
+        <span class="nav-icon">🛡️</span> Guardrails
+      </a>
+      {% endif %}
+    </div>
+
+    <!-- DATABASE -->
+    {% if 'db_connections' in permissions or 'db_explorer' in permissions or 'dba_playbooks' in permissions %}
+    <p class="sidebar-section-header">Database</p>
+    <div class="nav-group">
+      {% if 'db_connections' in permissions %}
+      <a href="/connections" class="nav-item {% if active_page=='db_connections' %}active{% endif %}">
+        <span class="nav-icon">🔌</span> Database Connections
+      </a>
+      {% endif %}
+      {% if 'db_explorer' in permissions %}
+      <a href="/explorer" class="nav-item {% if active_page=='db_explorer' %}active{% endif %}">
+        <span class="nav-icon">🗄️</span> Database Explorer
+      </a>
+      {% endif %}
+      {% if 'dba_playbooks' in permissions %}
+      <a href="/playbooks" class="nav-item {% if active_page=='dba_playbooks' %}active{% endif %}">
+        <span class="nav-icon">📚</span> DBA Playbooks
+      </a>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- AI -->
+    {% if 'ai_assistant' in permissions or 'ai_agents' in permissions or 'ask_oem' in permissions %}
+    <p class="sidebar-section-header">AI</p>
+    <div class="nav-group">
+      {% if 'ai_assistant' in permissions %}
+      <a href="/ai" class="nav-item {% if active_page=='ai_assistant' %}active{% endif %}">
+        <span class="nav-icon">🤖</span> AI Assistant
+      </a>
+      {% endif %}
+      {% if 'ai_agents' in permissions %}
+      <a href="/ai-agents" class="nav-item {% if active_page=='ai_agents' %}active{% endif %}">
+        <span class="nav-icon">🧠</span> AI Agents
+      </a>
+      <a href="/agent-monitor" class="nav-item {% if active_page=='agent_monitor' %}active{% endif %}">
+        <span class="nav-icon">📡</span> Agent Monitor
+      </a>
+      <a href="/ai-query-generator" class="nav-item {% if active_page=='ai_query_generator' %}active{% endif %}">
+        <span class="nav-icon">⚡</span> AI Query Generator
+      </a>
+      {% endif %}
+      {% if 'ask_oem' in permissions %}
+      <a href="/ask-oem" class="nav-item {% if active_page=='ask_oem' %}active{% endif %}">
+        <span class="nav-icon">🔮</span> AskOEM
+      </a>
+      {% endif %}
+      {% if 'mcp_console' in permissions %}
+      <a href="/mcp-console" class="nav-item {% if active_page=='mcp_console' %}active{% endif %}">
+        <span class="nav-icon">🔧</span> MCP Console
+      </a>
+      {% endif %}
+    </div>
+    {% endif %}
+
+    <div class="sidebar-divider"></div>
+
+    <!-- ACCOUNT section -->
+    <p class="sidebar-section-header">Account</p>
+    <div style="padding: 0 12px;">
+      <div class="caption" style="color: var(--text-subtle); font-size: 12px; padding: 0 4px 8px;">
+        ✅ System Operational<br>
+        🤖 AI Agents: Ready
+      </div>
+    </div>
+
+    <!-- Footer / user pill -->
+    <div class="sidebar-footer">
+      <div class="user-pill">
+        <div class="user-avatar">{{ username[0].upper() if username else '?' }}</div>
+        <div>
+          <div class="user-name">{{ username }}</div>
+          <div class="user-role">{% if 'user_management' in permissions %}👑 Admin{% elif 'db_connections' in permissions %}👨‍💼 DBA{% else %}👤 User{% endif %}</div>
+        </div>
+      </div>
+      <button class="btn-logout" onclick="doLogout()">🚪 Sign Out</button>
+      <div style="text-align:center; margin-top:10px; color: var(--text-subtle); font-size: 11px;">
+        💾 dbadeeds.ai v3.1<br>Oracle &amp; PostgreSQL AI Assistant
+      </div>
+    </div>
+  </aside>
+
+  <!-- ══ Main ═════════════════════════════════════════════════ -->
+  <div class="main">
+    <div class="topbar">
+      <span class="topbar-title">{% block page_title %}dbadeeds.ai{% endblock %}</span>
+      <div style="display:flex;align-items:center;gap:12px">
+        <span class="status-badge">
+          <span class="status-dot"></span> System Operational
+        </span>
+      </div>
+    </div>
+
+    <div class="page-content" id="page-content">
+      {% block content %}{% endblock %}
+    </div>
+  </div>
+
+</div><!-- /.app-shell -->
+
+<script>
+  async function doLogout() {
+    await fetch('/api/auth/logout', { method: 'POST', credentials: 'include' });
+    window.location.href = '/login';
+  }
+
+  async function api(method, path, body = null) {
+    const opts = { method, credentials: 'include', headers: { 'Content-Type': 'application/json' } };
+    if (body) opts.body = JSON.stringify(body);
+    const r = await fetch('/api' + path, opts);
+    if (r.status === 401) { window.location.href = '/login'; return null; }
+    return r.json();
+  }
+
+  function showToast(msg, type = 'success') {
+    const colors = {
+      success: { bg:'#F0FDF4', border:'#BBF7D0', color:'#166534' },
+      danger:  { bg:'#FEF2F2', border:'#FCA5A5', color:'#991B1B' },
+      info:    { bg:'#EFF6FF', border:'#BFDBFE', color:'#1E40AF' },
+      warn:    { bg:'#FFFBEB', border:'#FDE68A', color:'#92400E' },
+    };
+    const c = colors[type] || colors.success;
+    const t = document.createElement('div');
+    t.style.cssText = `position:fixed;bottom:20px;right:20px;z-index:9999;padding:12px 18px;
+      background:${c.bg};border:1px solid ${c.border};color:${c.color};
+      border-radius:8px;font-size:13px;font-weight:500;font-family:'Inter',sans-serif;
+      box-shadow:0 4px 12px rgba(0,0,0,.12);min-width:260px;
+      animation:slideUp .2s ease;`;
+    t.textContent = msg;
+    document.body.appendChild(t);
+    setTimeout(() => t.remove(), 3500);
+  }
+
+  function switchTab(name, btn) {
+    btn.closest('.tab-container, div, section').querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => { if (b.dataset.tab === name || b.getAttribute('onclick')?.includes(`'${name}'`)) b.classList.add('active'); });
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    const pane = document.getElementById(`tab-${name}`);
+    if (pane) pane.classList.add('active');
+    // re-apply to clicked button
+    btn.classList.add('active');
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    if (pane) pane.classList.add('active');
+  }
+
+  document.addEventListener('htmx:responseError', e => { if (e.detail.xhr.status === 401) window.location.href = '/login'; });
+
+  // Slide-up animation for toasts
+  const style = document.createElement('style');
+  style.textContent = '@keyframes slideUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}';
+  document.head.appendChild(style);
+
+  /* ── Global Active Connection Bar ─────────────────────────── */
+  (function() {
+    const _CSS = `
+      .conn-bar{display:flex;align-items:center;gap:10px;padding:8px 14px;border-radius:8px;
+        border:1px solid var(--border);background:#f8fafc;font-size:12px;margin-bottom:14px;
+        flex-wrap:wrap;min-height:38px;}
+      .conn-bar.connected{background:#f0fdf4;border-color:#86efac;}
+      .conn-bar.disconnected{background:#fff7ed;border-color:#fde68a;}
+      .conn-bar-dot{width:9px;height:9px;border-radius:50%;flex-shrink:0;}
+      .conn-bar.connected .conn-bar-dot{background:#22c55e;box-shadow:0 0 0 2px #bbf7d0;}
+      .conn-bar.disconnected .conn-bar-dot{background:#f59e0b;box-shadow:0 0 0 2px #fde68a;}
+      .conn-bar-label{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:#64748b;}
+      .conn-bar-name{font-weight:700;color:#1e293b;font-size:13px;}
+      .conn-bar-detail{font-family:var(--mono,monospace);font-size:11px;color:#64748b;}
+      .conn-bar-badge{font-size:10px;font-weight:600;padding:2px 7px;border-radius:4px;}
+      .conn-bar-badge.oracle{background:#fef3c7;color:#92400e;border:1px solid #fde68a;}
+      .conn-bar-badge.postgres{background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;}
+      .conn-bar-sep{color:#cbd5e1;font-size:14px;}
+      .conn-bar-warn{color:#92400e;font-size:12px;}
+      .conn-bar-link{color:#0369a1;text-decoration:none;font-weight:600;font-size:11px;
+        border:1px solid #bae6fd;background:#e0f2fe;padding:3px 10px;border-radius:5px;}
+      .conn-bar-link:hover{background:#bae6fd;}
+    `;
+    const _el = document.createElement('style');
+    _el.textContent = _CSS;
+    document.head.appendChild(_el);
+  })();
+
+  async function loadConnBar(containerId, opts) {
+    opts = opts || {};
+    const el = document.getElementById(containerId);
+    if (!el) return;
+    el.innerHTML = '<div class="conn-bar"><div class="spinner" style="width:14px;height:14px;border-width:2px;margin:0"></div><span style="color:#94a3b8;font-size:12px;margin-left:8px">Loading connection…</span></div>';
+    let d;
+    try { d = await api('GET', '/connections/active'); } catch(e) { d = null; }
+    const active   = (d && d.active) ? d.active : {};
+    const filterDb = opts.dbType || null;
+    const conns    = Object.values(active).filter(function(c){ return !filterDb || c.db_type === filterDb; });
+    if (!conns.length) {
+      el.innerHTML = '<div class="conn-bar disconnected">'
+        + '<span class="conn-bar-dot"></span>'
+        + '<span class="conn-bar-warn">\u26a0 No active database connection</span>'
+        + '<span class="conn-bar-sep">\u00b7</span>'
+        + '<span style="font-size:12px;color:#92400e">Activate a connection to enable queries</span>'
+        + '<a class="conn-bar-link" href="/connections" style="margin-left:auto">\uD83D\uDD0C Manage Connections</a>'
+        + '</div>';
+      return;
+    }
+    el.innerHTML = conns.map(function(c) {
+      var dbType   = c.db_type || 'postgres';
+      var badgeCls = dbType === 'oracle' ? 'oracle' : 'postgres';
+      var icon     = dbType === 'oracle' ? '\uD83D\uDD36' : '\uD83D\uDC18';
+      var hostPort = c.host ? (c.host + (c.port ? ':' + c.port : '')) : '';
+      var dbName   = c.database || c.service_name || c.sid || '';
+      var details  = [hostPort, dbName].filter(Boolean).join(' / ');
+      var env      = c.environment ? '<span class="conn-bar-badge ' + badgeCls + '" style="margin-left:4px">' + _esc(c.environment) + '</span>' : '';
+      return '<div class="conn-bar connected">'
+        + '<span class="conn-bar-dot"></span>'
+        + '<span class="conn-bar-label">Connected</span>'
+        + '<span class="conn-bar-sep">\u00b7</span>'
+        + '<span class="conn-bar-badge ' + badgeCls + '">' + icon + ' ' + dbType.toUpperCase() + '</span>'
+        + '<span class="conn-bar-name">' + _esc(c.name || 'Unnamed') + '</span>'
+        + (details ? '<span class="conn-bar-sep">\u00b7</span><span class="conn-bar-detail">' + _esc(details) + '</span>' : '')
+        + (c.username ? '<span class="conn-bar-detail">@ ' + _esc(c.username) + '</span>' : '')
+        + env
+        + '<a class="conn-bar-link" href="/connections" style="margin-left:auto" title="Manage connections">\uD83D\uDD0C Manage</a>'
+        + '</div>';
+    }).join('');
+  }
+
+  function _esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+</script>
+{% block scripts %}{% endblock %}
+</body>
+</html>

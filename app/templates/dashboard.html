@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — dbadeeds.ai{% endblock %}
+{% block page_title %}🚀 dbadeeds.ai Overview{% endblock %}
+{% set active_page = 'dashboard' %}
+
+{% block head %}
+<style>
+  /* Exact Streamlit dashboard colors */
+  .hero-section { padding: 2rem 0 1.5rem; }
+  .hero-section h1 { font-size: 2rem; font-weight: 700; color: var(--navy); margin-bottom: 12px; }
+  .hero-section p  { font-size: 1rem; color: #555; max-width: 900px; line-height: 1.7; }
+
+  /* Metrics row — matches st.metric */
+  .metrics-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 24px 0; }
+  .metric-card {
+    background: white; border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 18px 20px; box-shadow: var(--shadow-sm);
+  }
+  .metric-val { color: var(--navy); font-size: 26px; font-weight: 700; font-family: var(--mono); }
+  .metric-lbl { color: var(--text-muted); font-size: 13px; font-weight: 500; margin-top: 4px; }
+  .metric-delta { font-size: 12px; margin-top: 4px; }
+  .metric-delta.pos { color: #10B981; }
+  .metric-delta.neg { color: var(--danger); }
+
+  /* How it works section — matches the ol block */
+  .how-section {
+    margin-top: 2rem;
+  }
+  .how-section h3 { font-size: 16px; font-weight: 600; color: var(--text); margin-bottom: 14px; }
+  .how-steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+  .step-card {
+    background: white; border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 16px; box-shadow: var(--shadow-sm);
+    display: flex; flex-direction: column; gap: 8px;
+  }
+  .step-num { font-family: var(--mono); font-size: 22px; font-weight: 700; color: var(--accent); }
+  .step-verb { font-size: 14px; font-weight: 600; color: var(--navy); }
+  .step-desc { font-size: 12px; color: var(--text-muted); line-height: 1.5; }
+
+  /* Why DBAs use it — matches #f1f5f9 box */
+  .why-box {
+    margin-top: 2rem;
+    padding: 1.5rem;
+    background: #f1f5f9;
+    border-radius: 12px;
+    border: 1px solid var(--border);
+  }
+  .why-box h4 { font-size: 15px; font-weight: 600; color: var(--text); margin-bottom: 12px; }
+  .why-list { list-style: none; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .why-list li { font-size: 13px; color: #444; padding: 6px 0; }
+
+  /* Active connections + quick actions row */
+  .bottom-row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-top: 20px; }
+  .conn-row { display: flex; align-items: center; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid var(--border); font-size: 13px; }
+  .conn-row:last-child { border-bottom: none; }
+  .conn-name { font-weight: 500; color: var(--text); }
+  .conn-type { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+  .quick-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .action-card {
+    background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius);
+    padding: 14px 16px; text-decoration: none; color: var(--text);
+    transition: all .2s ease; display: block;
+  }
+  .action-card:hover {
+    background: white; border-color: var(--accent);
+    box-shadow: var(--shadow-md); text-decoration: none;
+  }
+  .action-card .icon { font-size: 22px; margin-bottom: 6px; }
+  .action-card h4 { font-size: 13px; font-weight: 600; }
+  .action-card p  { font-size: 11px; color: var(--text-muted); margin-top: 2px; }
+
+  .copyright { color: var(--text-muted); font-size: 12px; text-align: center; margin-top: 24px; padding-top: 16px; border-top: 1px solid var(--border); }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Hero — matches st.markdown html block -->
+<div class="hero-section">
+  <h1>AI Database Agent for Oracle &amp; PostgreSQL</h1>
+  <p>Designed for Support Desk teams during alerts and incidents, <strong>dbadeeds.ai</strong> is an autonomous AI DBA assistant that understands your Oracle and PostgreSQL environments, performs diagnostics, executes operational playbooks, and answers database-related questions in real time — safely and intelligently.</p>
+</div>
+
+<!-- Live metrics — matches col1.metric / col2.metric / col3.metric -->
+<div class="metrics-row" id="metricsRow">
+  <div class="metric-card">
+    <div class="metric-lbl">Active Sessions</div>
+    <div class="metric-val" id="m-sessions">14</div>
+    <div class="metric-delta pos">+2 from yesterday</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-lbl">Long Running Queries</div>
+    <div class="metric-val" id="m-lrq">3</div>
+    <div class="metric-delta neg">-1 from yesterday</div>
+  </div>
+  <div class="metric-card">
+    <div class="metric-lbl">DB Health</div>
+    <div class="metric-val" id="m-health" style="color:#10B981">Optimal</div>
+    <div class="metric-delta pos">All systems normal</div>
+  </div>
+</div>
+
+<!-- How it works -->
+<div class="how-section">
+  <h3>How dbadeeds.ai Works</h3>
+  <div class="how-steps">
+    <div class="step-card">
+      <div class="step-num">1</div>
+      <div class="step-verb">Connect</div>
+      <div class="step-desc">Securely connect to your Oracle (PDB/CDB) or PostgreSQL database.</div>
+    </div>
+    <div class="step-card">
+      <div class="step-num">2</div>
+      <div class="step-verb">Observe</div>
+      <div class="step-desc">Collect metadata, performance signals, and runtime stats.</div>
+    </div>
+    <div class="step-card">
+      <div class="step-num">3</div>
+      <div class="step-verb">Reason</div>
+      <div class="step-desc">AI agent understands context using DBA logic.</div>
+    </div>
+    <div class="step-card">
+      <div class="step-num">4</div>
+      <div class="step-verb">Act</div>
+      <div class="step-desc">Executes safe SQL or playbooks, or guides the DBA with insights.</div>
+    </div>
+  </div>
+</div>
+
+<!-- Why DBAs use it — matches #f1f5f9 box -->
+<div class="why-box">
+  <h4>Why DBAs Use dbadeeds.ai</h4>
+  <ul class="why-list">
+    <li>⚙️ Reduce MTTR during production incidents</li>
+    <li>📊 Eliminate repetitive health-check SQLs</li>
+    <li>🧠 Augment junior DBAs with senior-level intelligence</li>
+    <li>🚨 Catch problems before users feel them</li>
+    <li>🔄 Support multiple database platforms (Oracle &amp; PostgreSQL)</li>
+    <li>🔒 Safe by design — read-only SQL guardrails built in</li>
+  </ul>
+</div>
+
+<!-- Active connections + Quick actions -->
+<div class="bottom-row">
+  <div class="card">
+    <div class="card-title">🔌 Active Connections</div>
+    <div id="activeConns">
+      <div class="spinner" style="margin: 16px auto"></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-title">⚡ Quick Actions</div>
+    <div class="quick-grid">
+      {% if 'ai_assistant' in permissions %}
+      <a class="action-card" href="/ai">
+        <div class="icon">🤖</div>
+        <h4>AI Assistant</h4>
+        <p>Ask anything about your database</p>
+      </a>
+      {% endif %}
+      {% if 'db_explorer' in permissions %}
+      <a class="action-card" href="/explorer">
+        <div class="icon">🗄️</div>
+        <h4>DB Explorer</h4>
+        <p>Run and analyse SQL queries</p>
+      </a>
+      {% endif %}
+      {% if 'db_connections' in permissions %}
+      <a class="action-card" href="/connections">
+        <div class="icon">🔌</div>
+        <h4>Connections</h4>
+        <p>Manage database connections</p>
+      </a>
+      {% endif %}
+      {% if 'dba_playbooks' in permissions %}
+      <a class="action-card" href="/playbooks">
+        <div class="icon">📚</div>
+        <h4>DBA Playbooks</h4>
+        <p>Pre-built monitoring queries</p>
+      </a>
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Matches st.subheader("Copyright 2005-26 dbadeeds.ai") -->
+<div class="copyright">Copyright 2005–26 dbadeeds.ai</div>
+
+<script>
+  async function loadDashboard() {
+    // Active connections
+    try {
+      const d = await api('GET', '/connections/');
+      if (!d) return;
+      const active = (d.connections || []).filter(c => c.is_active);
+      const el = document.getElementById('activeConns');
+      if (!active.length) {
+        el.innerHTML = `<p style="color:var(--text-muted);font-size:13px;padding:8px 0">
+          No active connections. <a href="/connections">Add one →</a></p>`;
+      } else {
+        el.innerHTML = active.map(c => `
+          <div class="conn-row">
+            <div>
+              <div class="conn-name">${esc(c.name)}</div>
+              <div class="conn-type">${c.db_type.toUpperCase()} · ${esc(c.connection_string)}</div>
+            </div>
+            <span class="badge badge-green">● Active</span>
+          </div>`).join('');
+      }
+    } catch(e) {}
+  }
+
+  function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+  loadDashboard();
+</script>
+{% endblock %}

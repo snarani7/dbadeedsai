@@ -1,0 +1,770 @@
+{% extends "base.html" %}
+{% block title %}Guardrails — dbadeeds.ai{% endblock %}
+{% block page_title %}🛡️ AI Guardrails{% endblock %}
+{% set active_page = 'guardrails' %}
+
+{% block head %}
+<style>
+  /* ── Layout ─────────────────────────────────────────────────────── */
+  .gtabs { display:flex; gap:0; border-bottom:2px solid var(--border); margin-bottom:20px; }
+  .gtab  { padding:10px 22px; font-size:13px; font-weight:600; cursor:pointer;
+    border-bottom:3px solid transparent; margin-bottom:-2px; color:var(--muted);
+    transition:all .15s; background:none; border-left:none; border-right:none; border-top:none; }
+  .gtab:hover  { color:var(--accent); }
+  .gtab.active { color:var(--accent); border-bottom-color:var(--accent); }
+  .gpanel { display:none; }
+  .gpanel.active { display:block; }
+
+  /* ── Guardrail status cards ──────────────────────────────────────── */
+  .gr-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:16px; margin-bottom:24px; }
+  .gr-card { background:var(--surface); border:2px solid var(--border); border-radius:12px; padding:20px; box-shadow:var(--shadow); }
+  .gr-card.enabled  { border-color:#22c55e; }
+  .gr-card.disabled { border-color:#ef4444; }
+  .gr-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:12px; }
+  .gr-title  { font-size:15px; font-weight:700; }
+  .gr-badge  { font-size:11px; font-weight:700; padding:3px 10px; border-radius:20px; }
+  .badge-on  { background:#dcfce7; color:#166534; border:1px solid #86efac; }
+  .badge-off { background:#fee2e2; color:#991b1b; border:1px solid #fca5a5; }
+  .gr-desc   { font-size:12px; color:var(--muted); margin-bottom:12px; line-height:1.5; }
+  .gr-meta   { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .gr-kv label { font-size:10px; text-transform:uppercase; color:var(--muted); display:block; }
+  .gr-kv span  { font-size:13px; font-weight:600; font-family:var(--mono); }
+  .applies-list { display:flex; flex-wrap:wrap; gap:4px; margin-top:10px; }
+  .apply-tag { font-size:10px; background:var(--bg); border:1px solid var(--border);
+    padding:2px 8px; border-radius:4px; color:var(--muted); }
+
+  /* ── Stat counters ──────────────────────────────────────────────── */
+  .stat-row { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; margin-bottom:24px; }
+  .stat-card { background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:16px; text-align:center; box-shadow:var(--shadow); }
+  .stat-val  { font-size:28px; font-weight:700; font-family:var(--mono); color:var(--navy); }
+  .stat-lbl  { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-top:4px; }
+  .stat-today { font-size:11px; color:var(--success); margin-top:2px; }
+
+  /* ── Keyword groups ──────────────────────────────────────────────── */
+  .kw-group  { background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:16px; margin-bottom:12px; }
+  .kw-title  { font-size:13px; font-weight:700; margin-bottom:10px; }
+  .kw-tags   { display:flex; flex-wrap:wrap; gap:6px; }
+  .kw-tag    { font-size:11px; font-family:var(--mono); padding:3px 9px; border-radius:4px;
+    background:#fef9c3; color:#713f12; border:1px solid #fde68a; }
+  .kw-tag.sql { background:#fee2e2; color:#991b1b; border-color:#fca5a5; }
+
+  /* ── PII config editor ───────────────────────────────────────────── */
+  .pii-section { background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:18px; margin-bottom:16px; }
+  .pii-stitle  { font-size:13px; font-weight:700; margin-bottom:12px; }
+  .table-pill  { display:inline-flex; align-items:center; gap:6px; font-size:12px;
+    font-family:var(--mono); padding:4px 10px; border-radius:6px; margin:3px;
+    background:#fef2f2; color:#991b1b; border:1px solid #fca5a5; }
+  .table-pill button { background:none; border:none; cursor:pointer; color:#dc2626;
+    font-size:13px; padding:0 2px; line-height:1; }
+  .pattern-pill { background:#eff6ff; color:#1e40af; border:1px solid #bfdbfe; }
+  .exempt-pill  { background:#f0fdf4; color:#166534; border:1px solid #bbf7d0; }
+  .add-row  { display:flex; gap:8px; margin-top:10px; }
+  .add-row input { flex:1; }
+
+  /* ── Logs ────────────────────────────────────────────────────────── */
+  .log-row  { display:grid; grid-template-columns:140px 120px 120px 1fr; gap:12px;
+    align-items:start; padding:8px 12px; border-bottom:1px solid var(--border);
+    font-size:12px; }
+  .log-row:last-child { border-bottom:none; }
+  .log-row:hover { background:#f8fafc; }
+  .log-ts   { font-family:var(--mono); color:var(--muted); font-size:11px; }
+  .log-user { font-weight:600; }
+  .log-type { font-size:10px; font-weight:700; padding:2px 7px; border-radius:4px; }
+  .lt-cf    { background:#fef3c7; color:#92400e; }
+  .lt-sql   { background:#fee2e2; color:#991b1b; }
+  .lt-pii   { background:#ede9fe; color:#5b21b6; }
+  .lt-red   { background:#dcfce7; color:#166534; }
+  .log-detail { color:var(--muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; max-width:350px; }
+  .log-header { display:grid; grid-template-columns:140px 120px 120px 1fr; gap:12px;
+    padding:6px 12px; font-size:10px; font-weight:700; text-transform:uppercase;
+    color:var(--muted); background:#f8fafc; border-radius:6px 6px 0 0;
+    border-bottom:1px solid var(--border); }
+  .log-wrap { border:1px solid var(--border); border-radius:8px; overflow:auto; max-height:520px; }
+
+  /* ── SQL safety ops ──────────────────────────────────────────────── */
+  .op-tag { font-family:var(--mono); font-size:11px; padding:3px 8px; border-radius:4px;
+    background:#fee2e2; color:#991b1b; border:1px solid #fca5a5; display:inline-block; margin:2px; }
+  .op-tag.green { background:#dcfce7; color:#166534; border-color:#86efac; }
+
+  .empty-state { text-align:center; padding:40px; color:var(--muted); }
+  .section-hdr { font-size:14px; font-weight:700; color:var(--navy); margin-bottom:12px;
+    padding-bottom:6px; border-bottom:1px solid var(--border); }
+  .filter-row  { display:flex; gap:10px; margin-bottom:14px; flex-wrap:wrap; align-items:center; }
+
+  /* ── Live Tester ─────────────────────────────────────────────────── */
+  .tester-wrap { background:var(--surface); border:1px solid var(--border); border-radius:12px;
+    padding:22px; margin-bottom:20px; }
+  .tester-label  { font-size:13px; font-weight:700; margin-bottom:10px; }
+  textarea#testInput {
+    width:100%; min-height:120px; font-family:var(--mono); font-size:13px;
+    background:#0F172A; color:#E2E8F0; border:1px solid #334155; border-radius:8px;
+    padding:14px; resize:vertical; line-height:1.6; box-sizing:border-box;
+  }
+  textarea#testInput:focus { outline:none; border-color:var(--accent); }
+  .tester-controls { display:flex; gap:10px; align-items:center; margin-top:12px; flex-wrap:wrap; }
+
+  .layer-pipeline { display:flex; gap:0; align-items:stretch;
+    margin:20px 0; flex-wrap:wrap; }
+  .layer-card { flex:1; min-width:180px; background:var(--surface); border:2px solid var(--border);
+    border-radius:10px; padding:16px 18px; position:relative; }
+  .layer-card + .layer-card { margin-left:4px; }
+  .layer-card::before { content:'→'; position:absolute; left:-14px; top:50%;
+    transform:translateY(-50%); font-size:18px; color:var(--muted); }
+  .layer-card:first-child::before { display:none; }
+  .layer-card.pass   { border-color:#22c55e; background:#f0fdf4; }
+  .layer-card.block  { border-color:#ef4444; background:#fef2f2; }
+  .layer-card.redact { border-color:#f59e0b; background:#fffbeb; }
+  .layer-card.skip   { border-color:var(--border); opacity:.6; }
+  .layer-card.agg    { border-color:#6366f1; background:#eef2ff; }
+  .layer-hdr  { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+  .layer-name { font-size:12px; font-weight:700; }
+  .layer-badge { font-size:10px; font-weight:800; padding:2px 8px; border-radius:20px; }
+  .lb-pass   { background:#dcfce7; color:#166534; }
+  .lb-block  { background:#fee2e2; color:#991b1b; }
+  .lb-redact { background:#fef3c7; color:#92400e; }
+  .lb-skip   { background:#e2e8f0; color:#64748b; }
+  .lb-agg    { background:#e0e7ff; color:#3730a3; }
+  .layer-msg  { font-size:11px; color:var(--muted); line-height:1.5; max-height:80px;
+    overflow:auto; }
+  .layer-pills { display:flex; flex-wrap:wrap; gap:4px; margin-top:6px; }
+  .layer-pill  { font-size:10px; font-family:var(--mono); padding:2px 7px; border-radius:4px;
+    background:#fee2e2; color:#991b1b; border:1px solid #fca5a5; }
+  .layer-pill.warn { background:#fef3c7; color:#92400e; border-color:#fde68a; }
+
+  .verdict-banner { border-radius:10px; padding:14px 20px; margin-bottom:16px;
+    display:flex; align-items:center; gap:12px; font-weight:700; font-size:14px; }
+  .verdict-allowed { background:#dcfce7; border:2px solid #22c55e; color:#166534; }
+  .verdict-blocked { background:#fee2e2; border:2px solid #ef4444; color:#991b1b; }
+
+  .example-grid { display:grid; grid-template-columns:1fr 1fr; gap:8px; margin-top:10px; }
+  .example-btn  { font-size:11px; padding:8px 12px; text-align:left; cursor:pointer;
+    background:var(--bg); border:1px solid var(--border); border-radius:6px;
+    font-family:var(--mono); color:var(--text); transition:all .15s; }
+  .example-btn:hover { border-color:var(--accent); color:var(--accent); background:#f8fafc; }
+  .example-btn.danger { border-color:#fca5a5; color:#991b1b; background:#fef2f2; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Tab Bar ───────────────────────────────────────────────────────── -->
+<div class="gtabs">
+  <button class="gtab active" id="gtab-overview"  onclick="gTab('overview')">📊 Overview</button>
+  <button class="gtab"        id="gtab-content"   onclick="gTab('content')">🚫 Content Filter</button>
+  <button class="gtab"        id="gtab-sql"       onclick="gTab('sql')">🔒 SQL Safety</button>
+  <button class="gtab"        id="gtab-pii"       onclick="gTab('pii')">🛡️ PII Blacklist</button>
+  <button class="gtab"        id="gtab-logs"      onclick="gTab('logs')">📋 Audit Logs</button>
+  <button class="gtab"        id="gtab-test"      onclick="gTab('test')" style="color:#0ea5e9;font-weight:700">🧪 Test Guardrails</button>
+</div>
+
+<!-- ══ OVERVIEW ════════════════════════════════════════════════════ -->
+<div class="gpanel active" id="gpanel-overview">
+
+  <div class="stat-row" id="statRow">
+    <div class="stat-card"><div class="stat-val" id="s-cf">–</div>
+      <div class="stat-lbl">Content Filter Blocks</div><div class="stat-today" id="s-cf-t"></div></div>
+    <div class="stat-card"><div class="stat-val" id="s-sql">–</div>
+      <div class="stat-lbl">SQL Safety Blocks</div><div class="stat-today" id="s-sql-t"></div></div>
+    <div class="stat-card"><div class="stat-val" id="s-pii">–</div>
+      <div class="stat-lbl">PII Table Blocks</div><div class="stat-today" id="s-pii-t"></div></div>
+    <div class="stat-card"><div class="stat-val" id="s-red">–</div>
+      <div class="stat-lbl">PII Redactions</div><div class="stat-today" id="s-red-t"></div></div>
+  </div>
+
+  <div class="gr-grid" id="guardrailCards">
+    <div class="card" style="text-align:center;padding:30px;color:var(--muted)">
+      <div class="spinner"></div> Loading guardrail status…
+    </div>
+  </div>
+
+</div>
+
+<!-- ══ CONTENT FILTER ══════════════════════════════════════════════ -->
+<div class="gpanel" id="gpanel-content">
+  <p style="font-size:13px;color:var(--muted);margin-bottom:20px">
+    The Content Filter checks every question submitted to AI features before it reaches the LLM.
+    Questions containing restricted keywords are rejected immediately.
+  </p>
+  <div id="contentFilterBody">
+    <div class="empty-state"><div class="spinner"></div> Loading…</div>
+  </div>
+</div>
+
+<!-- ══ SQL SAFETY ══════════════════════════════════════════════════ -->
+<div class="gpanel" id="gpanel-sql">
+  <p style="font-size:13px;color:var(--muted);margin-bottom:20px">
+    The SQL Safety Guardrail validates every query before execution.
+    It blocks DDL, DML, dangerous stored procedures and multi-statement injection.
+  </p>
+  <div id="sqlSafetyBody">
+    <div class="empty-state"><div class="spinner"></div> Loading…</div>
+  </div>
+</div>
+
+<!-- ══ PII BLACKLIST ═══════════════════════════════════════════════ -->
+<div class="gpanel" id="gpanel-pii">
+  <p style="font-size:13px;color:var(--muted);margin-bottom:20px">
+    The PII Blacklist blocks queries against tables with sensitive data and
+    redacts individual PII columns (SSN, email, salary, etc.) before results
+    are sent to the LLM. All PII access attempts are logged.
+  </p>
+  <div id="piiBody">
+    <div class="empty-state"><div class="spinner"></div> Loading…</div>
+  </div>
+</div>
+
+<!-- ══ AUDIT LOGS ══════════════════════════════════════════════════ -->
+<div class="gpanel" id="gpanel-logs">
+  <div class="filter-row">
+    <select class="form-select" id="logTypeFilter" style="width:200px" onchange="loadLogs()">
+      <option value="">All Guardrails</option>
+      <option value="content_filter">Content Filter</option>
+      <option value="sql_safety">SQL Safety</option>
+      <option value="pii_blacklist">PII Blacklist</option>
+    </select>
+    <select class="form-select" id="logLimit" style="width:120px" onchange="loadLogs()">
+      <option value="100">100 entries</option>
+      <option value="200" selected>200 entries</option>
+      <option value="500">500 entries</option>
+    </select>
+    <button class="btn btn-secondary" onclick="loadLogs()">🔄 Refresh</button>
+    <span id="logCount" style="font-size:12px;color:var(--muted);margin-left:auto"></span>
+  </div>
+  <div id="logsBody">
+    <div class="empty-state"><div class="spinner"></div> Loading…</div>
+  </div>
+</div>
+
+<!-- ══ TEST GUARDRAILS ═════════════════════════════════════════════ -->
+<div class="gpanel" id="gpanel-test">
+  <p style="font-size:13px;color:var(--muted);margin-bottom:20px">
+    Test any SQL query or natural language prompt against all 3 guardrail layers in real time.
+    See exactly which layer blocks a query and why.
+  </p>
+
+  <div class="tester-wrap">
+    <div class="tester-label">Enter SQL query or natural language prompt:</div>
+    <textarea id="testInput" placeholder="-- Try: SELECT * FROM employees
+-- Try: SELECT COUNT(*) FROM customers
+-- Try: DROP TABLE users
+-- Or type a natural language question…"></textarea>
+    <div class="tester-controls">
+      <select class="form-select" id="testDbType" style="width:180px">
+        <option value="postgresql">🐘 PostgreSQL</option>
+        <option value="oracle">🔶 Oracle</option>
+      </select>
+      <label style="display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer">
+        <input type="checkbox" id="testIsNl" onchange="document.getElementById('testInput').placeholder = this.checked ? 'Ask a question in plain English…' : '-- Enter SQL query…'"/>
+        Natural language (skips SQL Safety + PII check)
+      </label>
+      <button class="btn btn-primary" onclick="runTest()">▶ Run Test</button>
+      <span id="testStatus" style="font-size:12px;color:var(--muted)"></span>
+    </div>
+  </div>
+
+  <!-- Quick examples -->
+  <div style="margin-bottom:20px">
+    <div class="section-hdr">⚡ Quick Examples</div>
+    <div class="example-grid">
+      <button class="example-btn" onclick="loadExample('SELECT pid, usename, state FROM pg_stat_activity WHERE state = \'active\'', false)">
+        ✅ SELECT pg_stat_activity (should PASS)
+      </button>
+      <button class="example-btn" onclick="loadExample('SELECT COUNT(*) FROM employees GROUP BY department', false)">
+        ✅ COUNT(*) FROM employees (should PASS — aggregated)
+      </button>
+      <button class="example-btn danger" onclick="loadExample('SELECT ssn, email, salary FROM employees', false)">
+        🛡️ SELECT PII columns from employees (should REDACT)
+      </button>
+      <button class="example-btn danger" onclick="loadExample('SELECT * FROM employees LIMIT 10', false)">
+        🛡️ SELECT * FROM employees (should BLOCK — PII table)
+      </button>
+      <button class="example-btn danger" onclick="loadExample('DROP TABLE users; SELECT 1', false)">
+        🔒 DROP TABLE (should BLOCK — SQL Safety)
+      </button>
+      <button class="example-btn danger" onclick="loadExample('EXEC xp_cmdshell(\'dir\')', false)">
+        🔒 EXEC dangerous proc (should BLOCK — SQL Safety)
+      </button>
+      <button class="example-btn danger" onclick="loadExample('Show me all passwords from users table', true)">
+        🚫 Ask about passwords (should BLOCK — Content Filter)
+      </button>
+      <button class="example-btn" onclick="loadExample('What are the top 5 slowest queries in the last hour?', true)">
+        ✅ Performance question (should PASS — Content Filter)
+      </button>
+    </div>
+  </div>
+
+  <!-- Results area -->
+  <div id="testResults" style="display:none">
+    <div id="testVerdict" class="verdict-banner"></div>
+    <div class="layer-pipeline" id="testPipeline"></div>
+    <div id="testDetail" style="background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px;margin-top:4px;display:none">
+      <div class="section-hdr">📋 Full Detail</div>
+      <pre id="testDetailPre" style="font-size:11px;font-family:var(--mono);white-space:pre-wrap;color:var(--text);margin:0"></pre>
+    </div>
+  </div>
+</div>
+
+<script>
+/* ── Tab switching ─────────────────────────────────────────────────── */
+function gTab(name) {
+  document.querySelectorAll('.gtab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.gpanel').forEach(p => p.classList.remove('active'));
+  document.getElementById('gtab-'  + name).classList.add('active');
+  document.getElementById('gpanel-'+ name).classList.add('active');
+  if (name === 'content' && !document.querySelector('#contentFilterBody .kw-group')) loadContentFilter();
+  if (name === 'sql'     && !document.querySelector('#sqlSafetyBody .op-tag'))       loadSqlSafety();
+  if (name === 'pii'     && !document.querySelector('#piiBody .pii-section'))         loadPiiConfig();
+  if (name === 'logs')   loadLogs();
+  if (name === 'test')   document.getElementById('testInput').focus();
+}
+
+/* ── Load on start ─────────────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', () => { loadStats(); loadOverview(); });
+
+/* ── Stats ─────────────────────────────────────────────────────────── */
+async function loadStats() {
+  const d = await api('GET', '/guardrails/stats');
+  if (!d) return;
+  const s = d.stats || {};
+  set('s-cf',    s.content_filter?.total  ?? '–');
+  set('s-cf-t',  s.content_filter?.today  ? `+${s.content_filter.today} today` : '');
+  set('s-sql',   s.sql_safety?.total      ?? '–');
+  set('s-sql-t', s.sql_safety?.today      ? `+${s.sql_safety.today} today` : '');
+  set('s-pii',   s.pii_blocked?.total     ?? '–');
+  set('s-pii-t', s.pii_blocked?.today     ? `+${s.pii_blocked.today} today` : '');
+  set('s-red',   s.pii_redacted?.total    ?? '–');
+  set('s-red-t', s.pii_redacted?.today    ? `+${s.pii_redacted.today} today` : '');
+}
+
+/* ── Overview cards ────────────────────────────────────────────────── */
+async function loadOverview() {
+  const d = await api('GET', '/guardrails/status');
+  if (!d) return;
+  const g = d.guardrails || {};
+  const cards = document.getElementById('guardrailCards');
+
+  const CF  = g.content_filter || {};
+  const SQL = g.sql_safety || {};
+  const PII = g.pii_blacklist || {};
+
+  cards.innerHTML = `
+    ${grCard('🚫', 'Content Filter', true, CF.description, [
+      ['Keywords', CF.keyword_count],
+      ['Applied to', CF.applied_to?.length + ' features'],
+    ], CF.applied_to)}
+    ${grCard('🔒', 'SQL Safety', true, SQL.description, [
+      ['Blocked Ops', SQL.blocked_leading?.length],
+      ['Danger Patterns', SQL.pattern_count],
+    ], SQL.applied_to)}
+    ${grCard('🛡️', 'PII Blacklist', PII.enabled, PII.description, [
+      ['Mode', PII.mode],
+      ['Blocked Tables', (PII.blocked_tables_oracle?.length||0) + (PII.blocked_tables_postgres?.length||0)],
+      ['PII Tables', PII.pii_column_tables],
+      ['Col Patterns', PII.column_patterns],
+    ], PII.applied_to)}
+  `;
+}
+
+function grCard(icon, title, enabled, desc, kv, apps) {
+  const badgeCls = enabled ? 'badge-on' : 'badge-off';
+  const cardCls  = enabled ? 'enabled' : 'disabled';
+  const kvHtml   = (kv||[]).map(([k,v]) =>
+    `<div class="gr-kv"><label>${esc(k)}</label><span>${esc(String(v??'–'))}</span></div>`
+  ).join('');
+  const appHtml  = (apps||[]).map(a => `<span class="apply-tag">${esc(a)}</span>`).join('');
+  return `<div class="gr-card ${cardCls}">
+    <div class="gr-header">
+      <div class="gr-title">${icon} ${title}</div>
+      <span class="gr-badge ${badgeCls}">${enabled ? '✓ ACTIVE' : '✗ DISABLED'}</span>
+    </div>
+    <div class="gr-desc">${esc(desc||'')}</div>
+    <div class="gr-meta">${kvHtml}</div>
+    <div class="applies-list">${appHtml}</div>
+  </div>`;
+}
+
+/* ── Content Filter tab ────────────────────────────────────────────── */
+async function loadContentFilter() {
+  const d = await api('GET', '/guardrails/content-filter');
+  if (!d) return;
+  const cats = d.categories || {};
+  let html = `<div class="section-hdr">🚫 Restricted Keyword Categories <span style="font-weight:400;font-size:12px;color:var(--muted)">(${d.total} total keywords)</span></div>`;
+  for (const [cat, kws] of Object.entries(cats)) {
+    if (!kws?.length) continue;
+    const isSql = cat.includes('SQL');
+    html += `<div class="kw-group">
+      <div class="kw-title">${esc(cat)}</div>
+      <div class="kw-tags">
+        ${kws.map(k => `<span class="kw-tag${isSql?' sql':''}">${esc(k)}</span>`).join('')}
+      </div>
+    </div>`;
+  }
+  html += `<div class="card" style="margin-top:16px">
+    <div class="card-title">ℹ️ How It Works</div>
+    <p style="font-size:13px;color:var(--muted);line-height:1.7">
+      Every question submitted to AI Assistant, AI Agents, AskDBA, and SQL Generate is
+      checked for restricted keywords <strong>before</strong> being sent to the LLM.
+      The check is case-insensitive. If a keyword match is found, the question is
+      immediately rejected with a friendly error message explaining what is allowed.
+    </p>
+    <p style="font-size:12px;color:var(--muted);margin-top:8px">
+      ✅ Allowed: database performance, query optimisation, monitoring, schema questions<br>
+      ❌ Blocked: inappropriate content, dangerous SQL, political content, illegal activities
+    </p>
+  </div>`;
+  document.getElementById('contentFilterBody').innerHTML = html;
+}
+
+/* ── SQL Safety tab ────────────────────────────────────────────────── */
+async function loadSqlSafety() {
+  const d = await api('GET', '/guardrails/safety-info');
+  if (!d) return;
+  const blocked   = (d.blocked_leading  || []).map(k => `<span class="op-tag">${esc(k)}</span>`).join('');
+  const inline    = (d.blocked_inline   || []).map(k => `<span class="op-tag">${esc(k)}</span>`).join('');
+  const allowed   = ['SELECT','WITH (CTE)','SHOW','DESCRIBE','EXPLAIN'].map(k =>
+    `<span class="op-tag green">${esc(k)}</span>`).join('');
+
+  document.getElementById('sqlSafetyBody').innerHTML = `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:20px">
+      <div class="pii-section">
+        <div class="pii-stitle">✅ Allowed Operations</div>
+        <div>${allowed}</div>
+      </div>
+      <div class="pii-section">
+        <div class="pii-stitle">❌ Blocked Leading Keywords</div>
+        <div>${blocked}</div>
+      </div>
+    </div>
+    <div class="pii-section">
+      <div class="pii-stitle">❌ Blocked Inline Keywords</div>
+      <div>${inline}</div>
+      <p style="font-size:12px;color:var(--muted);margin-top:8px">
+        These are blocked even when they appear inside sub-queries or CTEs.
+      </p>
+    </div>
+    <div class="pii-section">
+      <div class="pii-stitle">❌ Dangerous Function Patterns (${d.pattern_count})</div>
+      <p style="font-size:12px;color:var(--muted);line-height:1.6">
+        Regex-based detection catches: Oracle DBMS_* / UTL_* packages, EXEC/CALL/BEGIN/DECLARE blocks,
+        PostgreSQL lo_* large-object functions, pg_terminate_backend, pg_cancel_backend, pg_read_file,
+        COPY TO/FROM filesystem, and stacked statements (SQL injection protection).
+      </p>
+    </div>
+    <div class="card" style="margin-top:4px">
+      <div class="card-title">🔎 Applied At</div>
+      <p style="font-size:12px;color:var(--muted);line-height:1.7">
+        SQL Safety runs on: <strong>DB Explorer Execute</strong>, <strong>DB Explorer Explain</strong>,
+        <strong>SQL Generate</strong> (validates AI-generated SQL before returning it),
+        <strong>AskDBA Agent SQL</strong> (validates every SQL call the agent tries to run),
+        <strong>AI Agents SQL</strong>.
+      </p>
+    </div>`;
+}
+
+/* ── PII Config tab ────────────────────────────────────────────────── */
+let _piiCfg = null;
+
+async function loadPiiConfig() {
+  const d = await api('GET', '/guardrails/pii-config');
+  if (!d) return;
+  _piiCfg = d.config;
+  renderPii();
+}
+
+function renderPii() {
+  const c = _piiCfg || {};
+  const pp   = c.pii_protection || {};
+  const bt   = c.blocked_tables || {};
+  const ptc  = c.pii_tables_and_columns || {};
+  const pcp  = c.pii_column_patterns || {};
+  const ex   = c.exemptions || {};
+  const dbType = 'postgresql';
+
+  const blockedOracle = (bt.oracle    || []).map(t => pill(t, 'table', `removeBT('oracle','${t}')`)).join('');
+  const blockedPg     = (bt.postgresql|| []).map(t => pill(t, 'table', `removeBT('postgresql','${t}')`)).join('');
+  const patterns      = (pcp.patterns || []).map(p => pill(p, 'pattern', `removePat('${p}')`)).join('');
+  const exempt        = (ex.exempt_users || []).map(u => pill(u, 'exempt', `removeExempt('${u}')`)).join('');
+
+  document.getElementById('piiBody').innerHTML = `
+    <!-- Enable/Mode -->
+    <div class="pii-section">
+      <div class="pii-stitle">⚙️ Protection Settings</div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Status</label>
+          <select class="form-select" id="pii-enabled" style="width:160px" onchange="piiDirty()">
+            <option value="true"  ${pp.enabled?'selected':''}>✓ Enabled</option>
+            <option value="false" ${!pp.enabled?'selected':''}>✗ Disabled</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Mode</label>
+          <select class="form-select" id="pii-mode" style="width:220px" onchange="piiDirty()">
+            <option value="block_and_redact" ${pp.mode==='block_and_redact'?'selected':''}>block_and_redact (recommended)</option>
+            <option value="block"            ${pp.mode==='block'?'selected':''}>block only</option>
+            <option value="redact"           ${pp.mode==='redact'?'selected':''}>redact only</option>
+          </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Blocked Tables -->
+    <div class="pii-section">
+      <div class="pii-stitle">🚫 Blocked Tables <span style="font-size:11px;color:var(--muted);font-weight:400">— queries to these tables are rejected entirely</span></div>
+      <div style="margin-bottom:12px">
+        <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;margin-bottom:4px">Oracle</div>
+        <div id="bt-oracle">${blockedOracle || '<span style="color:var(--muted);font-size:12px">None</span>'}</div>
+        <div class="add-row">
+          <input class="form-input" id="bt-oracle-new" placeholder="TABLE_NAME" style="max-width:200px;text-transform:uppercase"/>
+          <button class="btn btn-secondary btn-sm" onclick="addBT('oracle')">+ Add</button>
+        </div>
+      </div>
+      <div>
+        <div style="font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;margin-bottom:4px">PostgreSQL</div>
+        <div id="bt-postgres">${blockedPg || '<span style="color:var(--muted);font-size:12px">None</span>'}</div>
+        <div class="add-row">
+          <input class="form-input" id="bt-postgres-new" placeholder="table_name" style="max-width:200px"/>
+          <button class="btn btn-secondary btn-sm" onclick="addBT('postgresql')">+ Add</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Column Patterns -->
+    <div class="pii-section">
+      <div class="pii-stitle">🔍 PII Column Patterns <span style="font-size:11px;color:var(--muted);font-weight:400">— column name patterns flagged as PII in any table</span></div>
+      <div id="pii-patterns">${patterns || '<span style="color:var(--muted);font-size:12px">None</span>'}</div>
+      <div class="add-row">
+        <input class="form-input" id="pii-pat-new" placeholder="e.g. ssn, email, salary" style="max-width:220px"/>
+        <button class="btn btn-secondary btn-sm" onclick="addPat()">+ Add</button>
+      </div>
+    </div>
+
+    <!-- Exempt Users -->
+    <div class="pii-section">
+      <div class="pii-stitle">✅ Exempt Users <span style="font-size:11px;color:var(--muted);font-weight:400">— these users bypass PII checks</span></div>
+      <div id="pii-exempt">${exempt || '<span style="color:var(--muted);font-size:12px">None</span>'}</div>
+      <div class="add-row">
+        <input class="form-input" id="pii-exempt-new" placeholder="username" style="max-width:200px"/>
+        <button class="btn btn-secondary btn-sm" onclick="addExempt()">+ Add</button>
+      </div>
+    </div>
+
+    <!-- Save bar -->
+    <div id="pii-save-bar" style="display:none;background:#fffbeb;border:1px solid #fbbf24;border-radius:8px;padding:12px 16px;margin-top:4px;display:flex;align-items:center;gap:12px">
+      <span style="font-size:13px;color:#92400e">⚠️ Unsaved changes</span>
+      <button class="btn btn-primary" onclick="savePii()">💾 Save & Reload</button>
+      <button class="btn btn-secondary" onclick="loadPiiConfig()">↩ Discard</button>
+    </div>
+    <div id="pii-saved-bar" style="display:none;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;padding:12px 16px;margin-top:4px">
+      <span style="font-size:13px;color:#166534">✅ Config saved and reloaded successfully</span>
+    </div>
+  `;
+}
+
+function pill(val, type, onRemove) {
+  const cls = type === 'table' ? 'table-pill' : type === 'pattern' ? 'table-pill pattern-pill' : 'table-pill exempt-pill';
+  return `<span class="${cls}">${esc(val)}<button onclick="${onRemove}" title="Remove">×</button></span>`;
+}
+function piiDirty() {
+  document.getElementById('pii-save-bar').style.display = 'flex';
+  document.getElementById('pii-saved-bar').style.display = 'none';
+  // Sync enabled/mode into _piiCfg
+  _piiCfg.pii_protection.enabled = document.getElementById('pii-enabled').value === 'true';
+  _piiCfg.pii_protection.mode    = document.getElementById('pii-mode').value;
+}
+
+function addBT(dbKey) {
+  const inp = document.getElementById(`bt-${dbKey === 'oracle' ? 'oracle' : 'postgres'}-new`);
+  const val = inp.value.trim();
+  if (!val) return;
+  _piiCfg.blocked_tables[dbKey] = _piiCfg.blocked_tables[dbKey] || [];
+  if (!_piiCfg.blocked_tables[dbKey].includes(val))
+    _piiCfg.blocked_tables[dbKey].push(val);
+  inp.value = '';
+  renderPii(); piiDirty();
+}
+function removeBT(dbKey, val) {
+  _piiCfg.blocked_tables[dbKey] = (_piiCfg.blocked_tables[dbKey]||[]).filter(t => t !== val);
+  renderPii(); piiDirty();
+}
+function addPat() {
+  const val = document.getElementById('pii-pat-new').value.trim().toLowerCase();
+  if (!val) return;
+  _piiCfg.pii_column_patterns.patterns = _piiCfg.pii_column_patterns.patterns || [];
+  if (!_piiCfg.pii_column_patterns.patterns.includes(val))
+    _piiCfg.pii_column_patterns.patterns.push(val);
+  document.getElementById('pii-pat-new').value = '';
+  renderPii(); piiDirty();
+}
+function removePat(val) {
+  _piiCfg.pii_column_patterns.patterns =
+    (_piiCfg.pii_column_patterns.patterns||[]).filter(p => p !== val);
+  renderPii(); piiDirty();
+}
+function addExempt() {
+  const val = document.getElementById('pii-exempt-new').value.trim();
+  if (!val) return;
+  _piiCfg.exemptions = _piiCfg.exemptions || {};
+  _piiCfg.exemptions.exempt_users = _piiCfg.exemptions.exempt_users || [];
+  if (!_piiCfg.exemptions.exempt_users.includes(val))
+    _piiCfg.exemptions.exempt_users.push(val);
+  document.getElementById('pii-exempt-new').value = '';
+  renderPii(); piiDirty();
+}
+function removeExempt(val) {
+  _piiCfg.exemptions.exempt_users =
+    (_piiCfg.exemptions.exempt_users||[]).filter(u => u !== val);
+  renderPii(); piiDirty();
+}
+async function savePii() {
+  const res = await apiFetch('/api/guardrails/pii-config', 'POST', { config: _piiCfg });
+  if (res.ok) {
+    document.getElementById('pii-save-bar').style.display  = 'none';
+    document.getElementById('pii-saved-bar').style.display = 'block';
+    setTimeout(() => document.getElementById('pii-saved-bar').style.display = 'none', 4000);
+    loadOverview(); loadStats();
+  } else {
+    const d = await res.json();
+    showToast(d.error || 'Save failed', 'danger');
+  }
+}
+
+/* ── Audit Logs tab ────────────────────────────────────────────────── */
+async function loadLogs() {
+  const type  = document.getElementById('logTypeFilter').value;
+  const limit = document.getElementById('logLimit').value;
+  const url   = `/guardrails/logs?limit=${limit}${type ? '&type=' + type : ''}`;
+  const d     = await api('GET', url);
+  if (!d) return;
+  const entries = d.entries || [];
+  document.getElementById('logCount').textContent = `${entries.length} of ${d.total} entries`;
+
+  if (!entries.length) {
+    document.getElementById('logsBody').innerHTML =
+      '<div class="empty-state"><div style="font-size:32px">📋</div><p>No log entries found</p></div>';
+    return;
+  }
+
+  const rows = entries.map(e => {
+    const g = e._guardrail || '';
+    const tagCls = g === 'content_filter' ? 'lt-cf' : g === 'sql_safety' ? 'lt-sql' :
+                   (e.event_type||'').includes('redact') ? 'lt-red' : 'lt-pii';
+    const tagLbl = g === 'content_filter' ? 'Content' : g === 'sql_safety' ? 'SQL' :
+                   (e.event_type||'').includes('redact') ? 'Redacted' : 'PII';
+    const detail = e.reason || e.sql || e.message || e.event_type || '—';
+    const ts = (e.timestamp||'').replace('T',' ').substring(0,19);
+    return `<div class="log-row">
+      <span class="log-ts">${esc(ts)}</span>
+      <span class="log-user">${esc(e.username||'—')}</span>
+      <span><span class="log-type ${tagCls}">${tagLbl}</span></span>
+      <span class="log-detail" title="${esc(detail)}">${esc(String(detail).substring(0,120))}</span>
+    </div>`;
+  }).join('');
+
+  document.getElementById('logsBody').innerHTML = `
+    <div class="log-wrap">
+      <div class="log-header">
+        <span>Timestamp</span><span>User</span><span>Guardrail</span><span>Detail</span>
+      </div>
+      ${rows}
+    </div>`;
+}
+
+/* ── Shared helpers ────────────────────────────────────────────────── */
+function set(id, val) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = val;
+}
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+async function apiFetch(url, method, body) {
+  const opts = { method, credentials:'include', headers:{'Content-Type':'application/json'} };
+  if (body && method !== 'GET') opts.body = JSON.stringify(body);
+  const res = await fetch(url, opts);
+  if (res.status === 401) window.location.href = '/login';
+  return res;
+}
+
+/* ── Test Guardrails ───────────────────────────────────────────────── */
+function loadExample(sql, isNl) {
+  document.getElementById('testInput').value = sql;
+  document.getElementById('testIsNl').checked = isNl;
+  document.getElementById('testResults').style.display = 'none';
+}
+
+async function runTest() {
+  const text   = document.getElementById('testInput').value.trim();
+  const dbType = document.getElementById('testDbType').value;
+  const isNl   = document.getElementById('testIsNl').checked;
+  if (!text) { showToast('Enter a query or question first', 'warn'); return; }
+
+  document.getElementById('testStatus').textContent = 'Testing…';
+  document.getElementById('testResults').style.display = 'none';
+
+  const res = await apiFetch('/api/guardrails/test', 'POST', { text, db_type: dbType, is_nl: isNl });
+  document.getElementById('testStatus').textContent = '';
+  if (!res.ok) {
+    const err = await res.json(); showToast(err.error || 'Test failed', 'danger'); return;
+  }
+
+  const d = await res.json();
+  renderTestResult(d);
+}
+
+function renderTestResult(d) {
+  const allowed = d.verdict === 'ALLOWED';
+
+  // Verdict banner
+  document.getElementById('testVerdict').className =
+    'verdict-banner ' + (allowed ? 'verdict-allowed' : 'verdict-blocked');
+  document.getElementById('testVerdict').innerHTML =
+    `<span style="font-size:22px">${allowed ? '✅' : '🚫'}</span>
+     <div>
+       <div>${allowed ? 'QUERY ALLOWED — Passes all guardrails' : 'QUERY BLOCKED — Failed guardrail check'}</div>
+       <div style="font-size:11px;font-weight:400;margin-top:2px">
+         Tested as: <strong>${esc(d.db_type.toUpperCase())}</strong> · 
+         ${d.is_nl ? 'Natural language prompt' : 'SQL query'}
+       </div>
+     </div>`;
+
+  // Layer pipeline
+  const pipeline = document.getElementById('testPipeline');
+  pipeline.innerHTML = (d.layers || []).map(l => {
+    let cls = 'skip', badgeCls = 'lb-skip', badgeTxt = 'SKIP';
+    if      (l.status === 'PASS')     { cls = 'pass';   badgeCls = 'lb-pass';   badgeTxt = '✓ PASS'; }
+    else if (l.status === 'BLOCKED')  { cls = 'block';  badgeCls = 'lb-block';  badgeTxt = '✗ BLOCKED'; }
+    else if (l.status === 'REDACT')   { cls = 'redact'; badgeCls = 'lb-redact'; badgeTxt = '⚠ REDACT'; }
+    else if (l.status === 'AGG_SAFE') { cls = 'agg';    badgeCls = 'lb-agg';    badgeTxt = '∑ AGG SAFE'; }
+
+    const piiPills = (l.pii_columns||[]).slice(0,6).map(c =>
+      `<span class="layer-pill warn">${esc(c)}</span>`).join('');
+    const blockedPills = (l.blocked_tables||[]).map(t =>
+      `<span class="layer-pill">${esc(t)}</span>`).join('');
+
+    // Trim message for display
+    const shortMsg = (l.message||'').split('\n').filter(Boolean).slice(0,3).join(' · ').substring(0,180);
+
+    return `<div class="layer-card ${cls}">
+      <div class="layer-hdr">
+        <span class="layer-name">${esc(l.icon)} Layer ${l.layer}: ${esc(l.name)}</span>
+        <span class="layer-badge ${badgeCls}">${badgeTxt}</span>
+      </div>
+      <div class="layer-msg">${esc(shortMsg || '—')}</div>
+      ${piiPills || blockedPills ? `<div class="layer-pills">${blockedPills}${piiPills}</div>` : ''}
+    </div>`;
+  }).join('');
+
+  // Full detail collapsible
+  const detailEl = document.getElementById('testDetail');
+  detailEl.style.display = 'block';
+  document.getElementById('testDetailPre').textContent = JSON.stringify(d, null, 2);
+
+  document.getElementById('testResults').style.display = 'block';
+  document.getElementById('testResults').scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+</script>
+{% endblock %}

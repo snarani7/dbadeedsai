@@ -1,0 +1,474 @@
+{% extends "base.html" %}
+{% block title %}User Management — dbadeeds.ai{% endblock %}
+{% block page_title %}👥 User Management{% endblock %}
+{% set active_page = 'user_management' %}
+
+{% block head %}
+<style>
+  /* ── Stats ───────────────────────────── */
+  .uc-stat-row { display:flex; gap:12px; margin-bottom:18px; }
+  .uc-stat { flex:1; background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:14px 18px; text-align:center; }
+  .uc-stat .val { font-family:var(--mono); font-size:26px; font-weight:700; }
+  .uc-stat .lbl { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; margin-top:4px; }
+
+  /* ── User cards ──────────────────────── */
+  .user-card { background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:16px 18px; margin-bottom:10px; box-shadow:var(--shadow); transition:box-shadow .15s; }
+  .user-card:hover { box-shadow:var(--shadow-md); }
+  .user-card.inactive { opacity:.55; }
+  .user-row { display:flex; align-items:flex-start; gap:12px; }
+  .user-avatar { width:40px; height:40px; border-radius:10px; background:linear-gradient(135deg,var(--accent),var(--accent2));
+    display:flex; align-items:center; justify-content:center; font-size:16px; font-weight:700; color:#fff; flex-shrink:0; }
+  .user-info { flex:1; min-width:0; }
+  .user-name-row { display:flex; align-items:center; gap:8px; flex-wrap:wrap; }
+  .u-username { font-family:var(--mono); font-size:13px; font-weight:600; }
+  .u-fullname { font-size:12px; color:var(--muted); margin-top:2px; }
+  .u-email { font-size:11px; color:var(--muted); }
+  .you-tag { background:#dbeafe; color:#1e40af; font-size:10px; font-weight:700; padding:2px 7px; border-radius:3px; }
+  .status-chip { display:inline-flex; align-items:center; gap:5px; font-size:11px; color:var(--muted); }
+  .dot { width:7px; height:7px; border-radius:50%; display:inline-block; }
+  .dot-on  { background:var(--success); box-shadow:0 0 0 2px rgba(16,185,129,.2); }
+  .dot-off { background:#d1d5db; }
+
+  /* ── Permission pills ────────────────── */
+  .perm-pills { display:flex; flex-wrap:wrap; gap:4px; margin-top:8px; }
+  .pill { display:inline-flex; align-items:center; gap:3px; padding:2px 8px; border-radius:4px;
+    font-size:10px; font-weight:600; border:1px solid; }
+  .pill-General  { background:#f0f9ff; border-color:#bae6fd; color:#0369a1; }
+  .pill-AI       { background:#f0fdf4; border-color:#bbf7d0; color:#166534; }
+  .pill-Database { background:#faf5ff; border-color:#e9d5ff; color:#6b21a8; }
+  .pill-Admin    { background:#fef3c7; border-color:#fde68a; color:#92400e; }
+
+  /* ── Action buttons ──────────────────── */
+  .user-actions { display:flex; gap:6px; margin-top:12px; }
+
+  /* ── Filter bar ──────────────────────── */
+  .filter-bar { display:flex; gap:10px; margin-bottom:16px; align-items:center; }
+
+  /* ── Modal ───────────────────────────── */
+  .modal-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,.5); z-index:1000; align-items:center; justify-content:center; }
+  .modal-overlay.open { display:flex; }
+  .modal { background:var(--surface); border-radius:14px; padding:28px; width:100%; max-width:600px;
+    box-shadow:var(--shadow-md); position:relative; max-height:92vh; overflow-y:auto; }
+  .modal-close { position:absolute; top:14px; right:16px; background:none; border:none;
+    font-size:20px; cursor:pointer; color:var(--muted); line-height:1; }
+  .modal-close:hover { color:var(--text); }
+  .modal h3 { font-size:16px; font-weight:600; margin-bottom:20px; }
+
+  /* ── Permission grid in modal ────────── */
+  .perm-section { margin-top:14px; }
+  .perm-group-label { font-size:10px; font-weight:700; color:var(--muted); text-transform:uppercase;
+    letter-spacing:.08em; margin:12px 0 6px; padding-bottom:4px; border-bottom:1px solid var(--border); }
+  .perm-grid { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+  .perm-check { display:flex; align-items:center; gap:8px; font-size:13px; cursor:pointer;
+    padding:6px 10px; border-radius:6px; border:1px solid var(--border); transition:background .1s; }
+  .perm-check:hover { background:var(--bg); }
+  .perm-check input { width:14px; height:14px; cursor:pointer; }
+
+  /* ── Preset quick-select ─────────────── */
+  .preset-bar { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:10px; }
+  .preset-btn { padding:4px 12px; border-radius:6px; border:1px solid var(--border); background:var(--bg);
+    font-size:11px; font-weight:600; cursor:pointer; transition:all .15s; color:var(--text); }
+  .preset-btn:hover { border-color:var(--accent); color:var(--accent); background:#eff6ff; }
+
+  /* ── Password strength ───────────────── */
+  .pw-bar-wrap { height:4px; background:var(--border); border-radius:2px; margin:6px 0 3px; }
+  .pw-bar { height:4px; border-radius:2px; transition:width .3s, background .3s; }
+  .pw-hint { font-size:11px; color:var(--muted); }
+
+  /* ── Delete confirm ──────────────────── */
+  .alert-danger { background:#fef2f2; border:1px solid #fca5a5; border-left:4px solid #ef4444;
+    border-radius:8px; padding:12px 16px; font-size:13px; color:#991b1b; margin-bottom:14px; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- Stats row -->
+<div class="uc-stat-row" id="statsRow">
+  <div class="uc-stat"><div class="val" id="st-total">–</div><div class="lbl">Total Users</div></div>
+  <div class="uc-stat"><div class="val" id="st-active" style="color:var(--success)">–</div><div class="lbl">Active</div></div>
+  <div class="uc-stat"><div class="val" id="st-inactive" style="color:var(--danger)">–</div><div class="lbl">Inactive</div></div>
+  <div class="uc-stat"><div class="val" id="st-admins" style="color:var(--warning)">–</div><div class="lbl">Admins</div></div>
+</div>
+
+<!-- Filter bar -->
+<div class="filter-bar">
+  <input class="form-input" id="searchInput" placeholder="🔍 Name or username…" oninput="filterUsers()" style="max-width:260px"/>
+  <select class="form-select" id="statusFilter" onchange="filterUsers()" style="width:140px">
+    <option value="">All statuses</option>
+    <option value="active">Active</option>
+    <option value="inactive">Inactive</option>
+  </select>
+  <div style="flex:1"></div>
+  <button class="btn btn-primary" onclick="openAddModal()">➕ Add User</button>
+</div>
+
+<!-- User list -->
+<div id="userGrid">
+  <div style="text-align:center;padding:40px;color:var(--muted)">
+    <div class="spinner" style="margin:0 auto 12px"></div>Loading users…
+  </div>
+</div>
+
+<!-- ── ADD / EDIT MODAL ─────────────────────────────────────── -->
+<div class="modal-overlay" id="userModal">
+  <div class="modal">
+    <button class="modal-close" onclick="closeModal()">✕</button>
+    <h3 id="modalTitle">➕ Add User</h3>
+    <input type="hidden" id="editUsername"/>
+
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Username *</label>
+        <input class="form-input" id="uUsername" placeholder="jdoe (3-32 chars)"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Full Name *</label>
+        <input class="form-input" id="uName" placeholder="Jane Doe"/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Email</label>
+        <input class="form-input" id="uEmail" type="email" placeholder="jdoe@company.com"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password <span id="pwdRequired" style="color:var(--danger)">*</span></label>
+        <input class="form-input" id="uPassword" type="password" placeholder="Min 8 characters" oninput="showPwStrength(this.value)"/>
+        <div class="pw-bar-wrap"><div class="pw-bar" id="pwBar" style="width:0;background:#ef4444"></div></div>
+        <div class="pw-hint" id="pwHint"></div>
+      </div>
+    </div>
+    <div class="form-group" style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+      <input type="checkbox" id="uActive" checked style="width:15px;height:15px;cursor:pointer"/>
+      <label for="uActive" style="font-size:13px;cursor:pointer">Account active</label>
+    </div>
+
+    <div class="perm-section">
+      <label class="form-label" style="margin-bottom:6px">Permissions *</label>
+
+      <!-- Preset quick-select -->
+      <div class="preset-bar" id="presetBar"></div>
+
+      <!-- Permission checkboxes by group -->
+      <div id="permCheckboxes"></div>
+    </div>
+
+    <div style="display:flex;gap:8px;margin-top:20px">
+      <button class="btn btn-primary" onclick="submitUser()" style="flex:1" id="submitBtn">💾 Create User</button>
+      <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+    </div>
+    <div id="modalError" style="color:var(--danger);font-size:13px;margin-top:10px;display:none"></div>
+  </div>
+</div>
+
+<!-- ── DELETE CONFIRM MODAL ─────────────────────────────────── -->
+<div class="modal-overlay" id="deleteModal">
+  <div class="modal" style="max-width:420px">
+    <button class="modal-close" onclick="closeDeleteModal()">✕</button>
+    <h3>🗑️ Confirm Delete</h3>
+    <div class="alert-danger" id="deleteWarning"></div>
+    <div style="display:flex;gap:8px">
+      <button class="btn" style="background:#ef4444;color:#fff;flex:1" onclick="confirmDelete()">Yes, Delete</button>
+      <button class="btn btn-secondary" onclick="closeDeleteModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const ME = "{{ username }}";
+let allUsers    = [];
+let editMode    = false;
+let deleteTarget= null;
+
+// ── Permission metadata (mirrors server ALL_PERMISSIONS) ──────────────────────
+const ALL_PERMISSIONS = {
+  dashboard:       {label:"Dashboard",           icon:"📊", group:"General"},
+  ai_assistant:    {label:"AI Assistant",         icon:"🤖", group:"AI"},
+  ai_agents:       {label:"AI Agents",            icon:"🧠", group:"AI"},
+  ai_query_generator: {label: "AI Query Generator", icon: "⚡", group: "AI"},
+  llm_settings:    {label:"LLM Settings",         icon:"⚙️",  group:"AI"},
+  ask_oem:         {label:"Ask OEM",              icon:"🔮", group:"AI"},
+  db_connections:  {label:"Database Connections", icon:"🔌", group:"Database"},
+  db_explorer:     {label:"Database Explorer",    icon:"🔍", group:"Database"},
+  dba_playbooks:   {label:"DBA Playbooks",        icon:"📋", group:"Database"},
+  user_management: {label:"User Management",      icon:"👥", group:"Admin"},
+};
+const GROUPS = ["General","AI","Database","Admin"];
+const PRESETS = {
+  "Admin (Full Access)": Object.keys(ALL_PERMISSIONS),
+  "DBA":       ["dashboard","ai_assistant","ai_agents","ai_query_generator", "db_connections","db_explorer","dba_playbooks"],
+  "Analyst":   ["dashboard","ai_assistant","db_explorer"],
+  "Support Desk":["dashboard"],
+  "Viewer":    ["dashboard"],
+};
+
+// ── Init ───────────────────────────────────────────────────────────────────────
+document.addEventListener("DOMContentLoaded", () => { buildPermUI(); loadUsers(); });
+
+function buildPermUI() {
+  // Presets
+  const bar = document.getElementById("presetBar");
+  Object.keys(PRESETS).forEach(name => {
+    const b = document.createElement("button");
+    b.className = "preset-btn"; b.textContent = name;
+    b.onclick = () => applyPreset(name);
+    bar.appendChild(b);
+  });
+
+  // Checkboxes by group
+  const box = document.getElementById("permCheckboxes");
+  GROUPS.forEach(group => {
+    const perms = Object.entries(ALL_PERMISSIONS).filter(([,v]) => v.group === group);
+    if (!perms.length) return;
+    box.insertAdjacentHTML("beforeend",
+      `<div class="perm-group-label">${group}</div><div class="perm-grid">${
+        perms.map(([key,meta]) =>
+          `<label class="perm-check">
+             <input type="checkbox" id="perm_${key}" name="perm" value="${key}"/>
+             ${meta.icon} ${meta.label}
+           </label>`
+        ).join("")
+      }</div>`);
+  });
+}
+
+function applyPreset(name) {
+  const keys = PRESETS[name] || [];
+  document.querySelectorAll("input[name=perm]").forEach(cb => {
+    cb.checked = keys.includes(cb.value);
+  });
+}
+
+function getSelectedPerms() {
+  return [...document.querySelectorAll("input[name=perm]:checked")].map(c => c.value);
+}
+
+function setSelectedPerms(perms) {
+  document.querySelectorAll("input[name=perm]").forEach(cb => {
+    cb.checked = perms.includes(cb.value);
+  });
+}
+
+// ── Load users ─────────────────────────────────────────────────────────────────
+async function loadUsers() {
+  const res  = await api("GET", "/users/");
+  allUsers   = res.users || [];
+  renderStats(allUsers);
+  renderUsers(allUsers);
+}
+
+function renderStats(users) {
+  const active  = users.filter(u => u.is_active).length;
+  const admins  = users.filter(u => (u.permissions||[]).includes("user_management")).length;
+  document.getElementById("st-total").textContent   = users.length;
+  document.getElementById("st-active").textContent  = active;
+  document.getElementById("st-inactive").textContent= users.length - active;
+  document.getElementById("st-admins").textContent  = admins;
+}
+
+function filterUsers() {
+  const q   = document.getElementById("searchInput").value.toLowerCase();
+  const st  = document.getElementById("statusFilter").value;
+  const filtered = allUsers.filter(u => {
+    if (q && !u.username.toLowerCase().includes(q) && !(u.name||"").toLowerCase().includes(q)) return false;
+    if (st === "active"   && !u.is_active) return false;
+    if (st === "inactive" && u.is_active)  return false;
+    return true;
+  });
+  renderUsers(filtered);
+}
+
+function renderUsers(users) {
+  const grid = document.getElementById("userGrid");
+  if (!users.length) {
+    grid.innerHTML = `<div style="text-align:center;padding:40px;color:var(--muted)">No users found.</div>`;
+    return;
+  }
+  grid.innerHTML = users.map(u => buildUserCard(u)).join("");
+}
+
+function buildUserCard(u) {
+  const isMe   = u.username === ME;
+  const active = u.is_active;
+  const initials = (u.name||u.username).slice(0,2).toUpperCase();
+  const perms  = (u.permissions||[]).map(key => {
+    const meta = ALL_PERMISSIONS[key];
+    if (!meta) return "";
+    return `<span class="pill pill-${meta.group}">${meta.icon} ${meta.label}</span>`;
+  }).join("");
+  const lastLogin = u.last_login ? u.last_login.slice(0,16) : "Never";
+  const created   = u.created_at ? u.created_at.slice(0,10) : "—";
+
+  return `<div class="user-card${active?"":" inactive"}" id="card_${u.username}">
+    <div class="user-row">
+      <div class="user-avatar">${initials}</div>
+      <div class="user-info">
+        <div class="user-name-row">
+          <span class="u-username">${u.username}</span>
+          ${isMe ? '<span class="you-tag">YOU</span>' : ""}
+          <span class="status-chip"><span class="dot ${active?"dot-on":"dot-off"}"></span>${active?"Active":"Inactive"}</span>
+        </div>
+        <div class="u-fullname">${u.name||"—"}</div>
+        <div class="u-email">${u.email||""} &nbsp;·&nbsp; Created ${created} &nbsp;·&nbsp; Last login ${lastLogin}</div>
+        <div class="perm-pills">${perms||'<span style="font-size:11px;color:var(--muted)">No permissions</span>'}</div>
+      </div>
+    </div>
+    <div class="user-actions">
+      <button class="btn btn-secondary" style="font-size:12px" onclick="openEditModal('${u.username}')">✏️ Edit</button>
+      <button class="btn btn-secondary" style="font-size:12px" onclick="toggleActive('${u.username}',${active})" ${isMe?"disabled":""}>
+        ${active?"🔴 Deactivate":"🟢 Activate"}
+      </button>
+      <button class="btn btn-secondary" style="font-size:12px;color:var(--danger)" onclick="openDeleteModal('${u.username}')" ${isMe?"disabled":""}>🗑️ Delete</button>
+    </div>
+  </div>`;
+}
+
+// ── Add modal ─────────────────────────────────────────────────────────────────
+function openAddModal() {
+  editMode = false;
+  document.getElementById("modalTitle").textContent = "➕ Add User";
+  document.getElementById("submitBtn").textContent  = "💾 Create User";
+  document.getElementById("editUsername").value     = "";
+  document.getElementById("uUsername").value        = "";
+  document.getElementById("uUsername").disabled     = false;
+  document.getElementById("uName").value            = "";
+  document.getElementById("uEmail").value           = "";
+  document.getElementById("uPassword").value        = "";
+  document.getElementById("uActive").checked        = true;
+  document.getElementById("pwdRequired").textContent= "*";
+  document.getElementById("modalError").style.display = "none";
+  setSelectedPerms([]);
+  resetPwBar();
+  document.getElementById("userModal").classList.add("open");
+}
+
+// ── Edit modal ─────────────────────────────────────────────────────────────────
+function openEditModal(username) {
+  const u = allUsers.find(x => x.username === username);
+  if (!u) return;
+  editMode = true;
+  document.getElementById("modalTitle").textContent  = `✏️ Editing — ${username}`;
+  document.getElementById("submitBtn").textContent   = "💾 Save Changes";
+  document.getElementById("editUsername").value      = username;
+  document.getElementById("uUsername").value         = username;
+  document.getElementById("uUsername").disabled      = true;
+  document.getElementById("uName").value             = u.name || "";
+  document.getElementById("uEmail").value            = u.email || "";
+  document.getElementById("uPassword").value         = "";
+  document.getElementById("uActive").checked         = u.is_active;
+  document.getElementById("uActive").disabled        = (username === ME);
+  document.getElementById("pwdRequired").textContent = "(leave blank to keep)";
+  document.getElementById("modalError").style.display= "none";
+  setSelectedPerms(u.permissions || []);
+  resetPwBar();
+  document.getElementById("userModal").classList.add("open");
+}
+
+function closeModal() {
+  document.getElementById("userModal").classList.remove("open");
+}
+
+// ── Submit ─────────────────────────────────────────────────────────────────────
+async function submitUser() {
+  const errDiv = document.getElementById("modalError");
+  errDiv.style.display = "none";
+  const isEdit = editMode;
+  const username = isEdit ? document.getElementById("editUsername").value
+                           : document.getElementById("uUsername").value.trim().toLowerCase();
+  const name     = document.getElementById("uName").value.trim();
+  const email    = document.getElementById("uEmail").value.trim();
+  const password = document.getElementById("uPassword").value;
+  const active   = document.getElementById("uActive").checked;
+  const perms    = getSelectedPerms();
+
+  if (!name)    { showModalErr("Full name is required."); return; }
+  if (!isEdit && !username) { showModalErr("Username is required."); return; }
+  if (!isEdit && password.length < 8) { showModalErr("Password must be at least 8 chars."); return; }
+  if (isEdit && password && password.length < 8) { showModalErr("Password must be at least 8 chars."); return; }
+  if (!perms.length) { showModalErr("Select at least one permission."); return; }
+
+  const body = { name, email, is_active: active, permissions: perms };
+  if (!isEdit) { body.username = username; body.password = password; }
+  if (isEdit && password) { body.password = password; }
+
+  const [url, method] = isEdit
+    ? [`/api/users/${username}`, "PUT"]
+    : ["/api/users/", "POST"];
+
+  const res = await apiFetch(url, method, body);
+  if (res.ok) {
+    closeModal();
+    loadUsers();
+  } else {
+    const d = await res.json();
+    showModalErr((d.errors||[d.error]).join(", "));
+  }
+}
+
+function showModalErr(msg) {
+  const e = document.getElementById("modalError");
+  e.textContent = "⚠ " + msg;
+  e.style.display = "block";
+}
+
+// ── Toggle active ──────────────────────────────────────────────────────────────
+async function toggleActive(username, currentlyActive) {
+  const endpoint = `/api/users/${username}/${currentlyActive ? "deactivate" : "activate"}`;
+  const res = await apiFetch(endpoint, "PUT", {});
+  if (res.ok) loadUsers();
+  else { const d = await res.json(); alert(d.error || "Error"); }
+}
+
+// ── Delete ─────────────────────────────────────────────────────────────────────
+function openDeleteModal(username) {
+  deleteTarget = username;
+  const u = allUsers.find(x => x.username === username);
+  document.getElementById("deleteWarning").innerHTML =
+    `⚠️ Permanently delete <strong>${username}</strong> (${u?.name||""})?<br>This cannot be undone.`;
+  document.getElementById("deleteModal").classList.add("open");
+}
+function closeDeleteModal() {
+  document.getElementById("deleteModal").classList.remove("open");
+}
+async function confirmDelete() {
+  if (!deleteTarget) return;
+  const res = await apiFetch(`/api/users/${deleteTarget}`, "DELETE", {});
+  if (res.ok) { closeDeleteModal(); loadUsers(); }
+  else { const d = await res.json(); alert(d.error || "Error"); }
+}
+
+// ── Password strength ─────────────────────────────────────────────────────────
+function showPwStrength(pwd) {
+  if (!pwd) { resetPwBar(); return; }
+  let score = 0;
+  if (pwd.length >= 8)  score++;
+  if (pwd.length >= 12) score++;
+  if (/[A-Z]/.test(pwd)) score++;
+  if (/[0-9]/.test(pwd)) score++;
+  if (/[^A-Za-z0-9]/.test(pwd)) score++;
+  const colors = ["#ef4444","#f97316","#eab308","#22c55e","#10b981"];
+  const labels = ["Very Weak","Weak","Fair","Good","Strong"];
+  const bar = document.getElementById("pwBar");
+  bar.style.width   = (score * 20) + "%";
+  bar.style.background = colors[Math.min(score,4)];
+  document.getElementById("pwHint").textContent = labels[Math.min(score,4)];
+}
+function resetPwBar() {
+  document.getElementById("pwBar").style.width = "0";
+  document.getElementById("pwHint").textContent = "";
+}
+
+// ── Helpers (cookie-based auth — matches base.html) ───────────────────────────
+// apiFetch — raw response helper for mutations (POST/PUT/DELETE)
+async function apiFetch(url, method, body) {
+  const opts = { method: method || 'GET', credentials: 'include',
+    headers: { 'Content-Type': 'application/json' } };
+  if (body && method !== 'GET') opts.body = JSON.stringify(body);
+  const res = await fetch(url, opts);
+  if (res.status === 401) { window.location.href = '/login'; }
+  return res;
+}
+</script>
+{% endblock %}

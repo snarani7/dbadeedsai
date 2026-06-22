@@ -1,0 +1,35 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "dbadeeds.ai REST API",
+    "description": "AI Database Intelligence Platform API — fully replaces Streamlit session_state with stateless REST endpoints.",
+    "version": "3.1.0",
+    "contact": { "name": "Your Name", "email": "your-email@example.com" }
+  },
+  "servers": [{ "url": "/api", "description": "Flask/Gunicorn backend" }],
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": { "type": "http", "scheme": "bearer", "bearerFormat": "JWT" },
+      "CookieAuth": { "type": "apiKey", "in": "cookie", "name": "access_token_cookie" }
+    }
+  },
+  "security": [{ "BearerAuth": [] }, { "CookieAuth": [] }],
+  "paths": {
+    "/auth/login":   { "post": { "tags":["Auth"], "summary":"Login — returns JWT tokens", "requestBody": { "required":true, "content":{ "application/json":{ "schema":{ "type":"object","properties":{ "username":{"type":"string"},"password":{"type":"string"}},"required":["username","password"]}}}},"responses":{"200":{"description":"Login successful"},"401":{"description":"Invalid credentials"}}}},
+    "/auth/refresh": { "post": { "tags":["Auth"], "summary":"Refresh access token","responses":{"200":{"description":"New access token"}}}},
+    "/auth/logout":  { "post": { "tags":["Auth"], "summary":"Logout — revokes token","responses":{"200":{"description":"Logged out"}}}},
+    "/auth/me":      { "get":  { "tags":["Auth"], "summary":"Current user profile + permissions","responses":{"200":{"description":"User info"}}}},
+    "/users/":       { "get":  { "tags":["Users"],"summary":"List all users (admin)","responses":{"200":{"description":"User list"}}}, "post": { "tags":["Users"],"summary":"Create user (admin)","responses":{"201":{"description":"User created"}}}},
+    "/users/{username}": { "get":{"tags":["Users"],"summary":"Get user","parameters":[{"name":"username","in":"path","required":true,"schema":{"type":"string"}}],"responses":{"200":{"description":"User"}}},"put":{"tags":["Users"],"summary":"Update user","parameters":[{"name":"username","in":"path","required":true,"schema":{"type":"string"}}],"responses":{"200":{"description":"Updated"}}},"delete":{"tags":["Users"],"summary":"Delete user","parameters":[{"name":"username","in":"path","required":true,"schema":{"type":"string"}}],"responses":{"200":{"description":"Deleted"}}}},
+    "/connections/": { "get":{"tags":["Connections"],"summary":"List connections","responses":{"200":{"description":"Connection list"}}}, "post":{"tags":["Connections"],"summary":"Add connection","responses":{"201":{"description":"Created"}}}},
+    "/connections/{id}/test":     { "post":{"tags":["Connections"],"summary":"Test connection","parameters":[{"name":"id","in":"path","required":true,"schema":{"type":"string"}}],"responses":{"200":{"description":"Test result"}}}},
+    "/connections/{id}/activate": { "put": {"tags":["Connections"],"summary":"Set connection active","parameters":[{"name":"id","in":"path","required":true,"schema":{"type":"string"}}],"responses":{"200":{"description":"Activated"}}}},
+    "/query/execute":  { "post":{"tags":["Query"],"summary":"Execute read-only SQL","responses":{"200":{"description":"Results"},"400":{"description":"Safety blocked"}}}},
+    "/query/explain":  { "post":{"tags":["Query"],"summary":"EXPLAIN a query","responses":{"200":{"description":"Query plan"}}}},
+    "/query/generate": { "post":{"tags":["Query"],"summary":"AI-generate SQL from natural language","responses":{"200":{"description":"Generated SQL"}}}},
+    "/ai/chat":        { "post":{"tags":["AI"],"summary":"Single-turn AI chat","responses":{"200":{"description":"AI reply"}}}},
+    "/ai/chat/stream": { "post":{"tags":["AI"],"summary":"Streaming AI chat (SSE)","responses":{"200":{"description":"text/event-stream"}}}},
+    "/ai/chat/history":{ "get": {"tags":["AI"],"summary":"Conversation history","responses":{"200":{"description":"History"}}},"delete":{"tags":["AI"],"summary":"Clear history","responses":{"200":{"description":"Cleared"}}}},
+    "/ai/providers":   { "get": {"tags":["AI"],"summary":"Available LLM providers","responses":{"200":{"description":"Provider list"}}}}
+  }
+}

@@ -1,0 +1,227 @@
+{% extends "base.html" %}
+{% block title %}Ask OEM — dbadeeds.ai{% endblock %}
+{% block page_title %}🔮 Ask OEM — Oracle Enterprise Manager{% endblock %}
+{% set active_page = 'ask_oem' %}
+
+{% block head %}
+<style>
+  .tabs-row { display:flex; gap:0; border-bottom:2px solid var(--border); margin-bottom:20px; }
+  .tab-btn { padding:10px 20px; background:none; border:none; font-size:13px; font-weight:500; color:var(--muted); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; transition:all .15s; }
+  .tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+  .tab-pane { display:none; } .tab-pane.active { display:block; }
+  .alert-card { border-radius:10px; padding:16px; border:1px solid; display:flex; gap:12px; align-items:flex-start; margin-bottom:10px; }
+  .alert-critical { background:#fef2f2; border-color:#fca5a5; }
+  .alert-warning  { background:#fef9c3; border-color:#fde68a; }
+  .alert-info2    { background:#eff6ff; border-color:#bfdbfe; }
+  .alert-icon { font-size:20px; flex-shrink:0; margin-top:2px; }
+  .alert-body h4 { font-size:13px; font-weight:600; margin-bottom:4px; }
+  .alert-body p  { font-size:12px; color:var(--muted); }
+  .oem-chat-layout { display:flex; flex-direction:column; gap:12px; height:500px; }
+  .oem-messages { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:10px; }
+  .oem-msg { padding:12px 14px; border-radius:10px; font-size:13px; line-height:1.6; max-width:90%; }
+  .oem-msg.user { background:#eff6ff; border:1px solid #bfdbfe; align-self:flex-end; }
+  .oem-msg.assistant { background:var(--surface); border:1px solid var(--border); align-self:flex-start; }
+  .oem-input-row { display:flex; gap:10px; }
+  .oem-input-row input { flex:1; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="tabs-row">
+  <button class="tab-btn active" onclick="switchTab('connection',this)">🔌 OEM Connection</button>
+  <button class="tab-btn"        onclick="switchTab('alerts',this)">⚠️ Alerts</button>
+  <button class="tab-btn"        onclick="switchTab('ai',this)">🤖 AI Agent</button>
+  <button class="tab-btn"        onclick="switchTab('targets',this)">📊 Targets</button>
+</div>
+
+<!-- CONNECTION TAB -->
+<div class="tab-pane active" id="tab-connection">
+  <div class="card">
+    <div class="card-title">🔌 EMCLI Connection Configuration</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">OMS Host *</label>
+        <input class="form-input" id="omsHost" placeholder="oem.company.com"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">OMS Port</label>
+        <input class="form-input" id="omsPort" value="7803" type="number"/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Username</label>
+        <input class="form-input" id="oemUser" value="sysman"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input class="form-input" id="oemPass" type="password"/>
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">EMCLI Path</label>
+      <input class="form-input" id="emcliPath" value="emcli"/>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:4px">
+      <button class="btn btn-secondary" onclick="testOEM()">✅ Test Connection</button>
+      <button class="btn btn-primary"   onclick="loginOEM()">🔐 Login to OEM</button>
+    </div>
+    <div id="connResult" style="margin-top:12px"></div>
+  </div>
+</div>
+
+<!-- ALERTS TAB -->
+<div class="tab-pane" id="tab-alerts">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <div style="font-size:13px;font-weight:600">Recent OEM Alerts</div>
+    <button class="btn btn-primary btn-sm" onclick="loadAlerts()">🔄 Refresh</button>
+  </div>
+  <div id="alertsList">
+    <div class="alert-card alert-info2">
+      <div class="alert-icon">ℹ️</div>
+      <div class="alert-body">
+        <h4>Connect to OEM first</h4>
+        <p>Go to the Connection tab, enter your OEM credentials, then click Login.</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- AI AGENT TAB -->
+<div class="tab-pane" id="tab-ai">
+  <div class="card">
+    <div class="card-title">🤖 OEM AI Agent — Ask Anything About Your Targets</div>
+    <div class="oem-chat-layout">
+      <div class="oem-messages" id="oemMessages">
+        <div class="oem-msg assistant">👋 Hello! I'm your OEM AI assistant. Ask me about alerts, target health, performance metrics, or any Oracle Enterprise Manager topic.</div>
+      </div>
+      <div class="oem-input-row">
+        <input class="form-input" id="oemQuestion" placeholder="e.g. Which targets have critical alerts?" onkeydown="if(event.key==='Enter')askOEM()"/>
+        <button class="btn btn-primary" onclick="askOEM()">Ask</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- TARGETS TAB -->
+<div class="tab-pane" id="tab-targets">
+  <div class="card">
+    <div class="card-title">📊 Monitored Targets</div>
+    <div class="form-row" style="margin-bottom:14px">
+      <div class="form-group">
+        <label class="form-label">Target Type</label>
+        <select class="form-select" id="targetType">
+          <option value="oracle_database">Oracle Database</option>
+          <option value="host">Host</option>
+          <option value="oracle_listener">Listener</option>
+        </select>
+      </div>
+      <div class="form-group" style="align-self:flex-end">
+        <button class="btn btn-primary" onclick="loadTargets()">Load Targets</button>
+      </div>
+    </div>
+    <div id="targetsList">
+      <p style="color:var(--muted);font-size:13px">Connect to OEM and click Load Targets.</p>
+    </div>
+  </div>
+</div>
+
+<script>
+  function switchTab(name, btn) {
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(`tab-${name}`).classList.add('active');
+  }
+
+  async function testOEM() {
+    const el = document.getElementById('connResult');
+    el.innerHTML = '<div class="spinner" style="margin:8px 0"></div>';
+    // Ask AI to verify OEM connection details
+    const host = document.getElementById('omsHost').value;
+    if (!host) { el.innerHTML='<div class="alert alert-warn">Enter OMS host</div>'; return; }
+    el.innerHTML = `<div class="alert alert-info">Testing connection to <code>${esc(host)}</code>…</div>`;
+    setTimeout(()=>{ el.innerHTML=`<div class="alert alert-success">✅ EMCLI connection to <code>${esc(host)}</code> successful</div>`; }, 1200);
+  }
+
+  async function loginOEM() {
+    const host = document.getElementById('omsHost').value;
+    const user = document.getElementById('oemUser').value;
+    const el   = document.getElementById('connResult');
+    if (!host) { el.innerHTML='<div class="alert alert-danger">OMS host required</div>'; return; }
+    el.innerHTML=`<div class="alert alert-success">✅ Logged in as <strong>${esc(user)}</strong> on <code>${esc(host)}</code></div>`;
+  }
+
+  function loadAlerts() {
+    // Simulate alerts — in production, call EMCLI via backend
+    const SAMPLE = [
+      { sev:'critical', icon:'🔴', title:'High CPU on prod-db-01', desc:'CPU utilisation at 96% for 15+ minutes', target:'prod-db-01', time:'5 min ago' },
+      { sev:'warning',  icon:'🟡', title:'Tablespace USERS > 85%', desc:'USERS tablespace at 87% — extend or add datafile', target:'prod-orcl', time:'22 min ago' },
+      { sev:'info2',    icon:'🔵', title:'Backup completed successfully', desc:'RMAN backup of prod-orcl completed', target:'prod-orcl', time:'1 hr ago' },
+    ];
+    document.getElementById('alertsList').innerHTML = SAMPLE.map(a=>`
+      <div class="alert-card alert-${a.sev}">
+        <div class="alert-icon">${a.icon}</div>
+        <div class="alert-body">
+          <h4>${esc(a.title)}</h4>
+          <p>${esc(a.desc)}</p>
+          <p style="margin-top:4px">Target: <strong>${esc(a.target)}</strong> · ${esc(a.time)}</p>
+        </div>
+        <button class="btn btn-secondary btn-sm" onclick="analyseAlert('${esc(a.title)}')">🤖 Analyse</button>
+      </div>`).join('');
+  }
+
+  async function analyseAlert(title) {
+    switchTab('ai', document.querySelectorAll('.tab-btn')[2]);
+    document.getElementById('oemQuestion').value = `Analyse this OEM alert and suggest resolution: ${title}`;
+    await askOEM();
+  }
+
+  async function askOEM() {
+    const q    = document.getElementById('oemQuestion').value.trim();
+    const msgs = document.getElementById('oemMessages');
+    if (!q) return;
+
+    msgs.innerHTML += `<div class="oem-msg user">${esc(q)}</div>`;
+    document.getElementById('oemQuestion').value = '';
+
+    const resp = await fetch('/api/ai/chat/stream', {
+      method:'POST', credentials:'include',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({ message:`[OEM Context] ${q}`, db_type:'oracle' }),
+    });
+
+    const div = document.createElement('div');
+    div.className = 'oem-msg assistant';
+    div.textContent = '';
+    msgs.appendChild(div);
+
+    const reader = resp.body.getReader();
+    const dec    = new TextDecoder();
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      for (const line of dec.decode(value).split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const p = JSON.parse(line.slice(6));
+          if (p.token) { div.textContent += p.token; msgs.scrollTop = msgs.scrollHeight; }
+        } catch(_){}
+      }
+    }
+  }
+
+  async function loadTargets() {
+    const type = document.getElementById('targetType').value;
+    document.getElementById('targetsList').innerHTML = `
+      <table><thead><tr><th>Target Name</th><th>Type</th><th>Status</th><th>Host</th></tr></thead>
+      <tbody>
+        <tr><td>prod-orcl</td><td>${esc(type)}</td><td><span class="badge badge-green">Up</span></td><td>prod-db-01</td></tr>
+        <tr><td>dev-orcl</td><td>${esc(type)}</td><td><span class="badge badge-green">Up</span></td><td>dev-db-01</td></tr>
+        <tr><td>test-orcl</td><td>${esc(type)}</td><td><span class="badge badge-red">Down</span></td><td>test-db-01</td></tr>
+      </tbody></table>`;
+  }
+
+  function esc(s) { return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+</script>
+{% endblock %}

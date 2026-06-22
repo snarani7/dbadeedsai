@@ -1,0 +1,387 @@
+{% extends "base.html" %}
+{% block title %}AI Query Generator — dbadeeds.ai{% endblock %}
+{% block page_title %}⚡ AI Query Generator{% endblock %}
+{% set active_page = 'db_explorer' %}
+
+{% block head %}
+<style>
+  .gen-layout { display:grid; grid-template-columns:1fr; gap:20px; max-width:900px; }
+  .section-card { background:#fff; border:1px solid var(--border); border-radius:10px; padding:20px; }
+  .section-title { font-size:13px; font-weight:700; color:var(--navy); margin-bottom:12px; }
+  .form-group  { margin-bottom:14px; }
+  .form-label  { font-size:12px; font-weight:600; color:var(--muted); display:block; margin-bottom:5px; text-transform:uppercase; letter-spacing:.04em; }
+  .form-input, .form-select, .form-textarea {
+    width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:8px;
+    font-size:13px; font-family:var(--font); box-sizing:border-box; transition:border .15s;
+  }
+  .form-input:focus, .form-select:focus, .form-textarea:focus { outline:none; border-color:var(--accent); }
+  .form-textarea { resize:vertical; min-height:110px; }
+  .settings-row { display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; margin-bottom:14px; }
+  .checkbox-row { display:flex; gap:20px; flex-wrap:wrap; margin-bottom:14px; }
+  .checkbox-row label { display:flex; align-items:center; gap:6px; font-size:13px; cursor:pointer; }
+  .action-row { display:flex; gap:10px; align-items:center; margin-top:4px; flex-wrap:wrap; }
+  .model-info { font-size:12px; color:var(--muted); font-weight:500; padding:8px 12px; background:var(--bg); border-radius:6px; border:1px solid var(--border); }
+
+  /* SQL output */
+  .sql-output-wrap { background:#0F172A; border-radius:10px; position:relative; overflow:hidden; }
+  .sql-output-header { display:flex; align-items:center; justify-content:space-between; padding:10px 14px; background:rgba(255,255,255,.05); border-bottom:1px solid rgba(255,255,255,.08); }
+  .sql-output-lang { font-size:11px; color:#64748b; font-weight:600; text-transform:uppercase; letter-spacing:.06em; }
+  .sql-output-btns { display:flex; gap:6px; }
+  .sql-btn { padding:4px 10px; border-radius:5px; font-size:11px; font-weight:600; border:1px solid rgba(255,255,255,.15); background:rgba(255,255,255,.06); color:#94a3b8; cursor:pointer; transition:background .15s; }
+  .sql-btn:hover { background:rgba(255,255,255,.14); color:#e2e8f0; }
+  .sql-code { padding:16px; font-family:var(--mono); font-size:12px; color:#e2e8f0; line-height:1.6; white-space:pre-wrap; word-break:break-word; min-height:80px; max-height:320px; overflow-y:auto; }
+
+  /* Safety badge */
+  .safe-badge { display:inline-flex; align-items:center; gap:5px; padding:4px 10px; background:#ECFDF5; color:#065F46; border:1px solid #A7F3D0; border-radius:20px; font-size:11px; font-weight:600; }
+  .blocked-badge { background:#FEF2F2; color:#991B1B; border-color:#FECACA; }
+
+  /* Results table (reused from other pages) */
+  .results-wrap { margin-top:14px; overflow-x:auto; border-radius:8px; border:1px solid var(--border); }
+  .results-table { width:100%; border-collapse:collapse; font-size:12px; }
+  .results-table th { background:#f8fafc; font-weight:600; text-transform:uppercase; font-size:10px; color:var(--muted); padding:8px 12px; border-bottom:1px solid var(--border); text-align:left; position:sticky; top:0; }
+  .results-table td { padding:7px 12px; border-bottom:1px solid var(--border); color:var(--text); font-family:var(--mono); font-size:11px; white-space:nowrap; }
+  .results-table tr:last-child td { border-bottom:none; }
+  .results-table tr:hover td { background:#f9fafb; }
+  .results-meta { font-size:11px; color:var(--muted); padding:8px 12px; background:#f8fafc; border-top:1px solid var(--border); }
+
+  /* Examples accordion */
+  .examples-toggle { width:100%; text-align:left; padding:10px 14px; background:#F9FAFB; border:1px solid var(--border); border-radius:8px; cursor:pointer; font-size:13px; font-weight:500; transition:background .1s; }
+  .examples-toggle:hover { background:#F3F4F6; }
+  .examples-body { display:none; padding:14px; background:#fff; border:1px solid var(--border); border-top:none; border-radius:0 0 8px 8px; font-size:13px; line-height:1.8; }
+  .examples-body strong { color:var(--navy); }
+  .example-chip { display:inline-block; background:#EFF6FF; color:#1D4ED8; border:1px solid #BFDBFE; border-radius:20px; padding:3px 10px; font-size:11px; cursor:pointer; margin:2px; transition:background .1s; }
+  .example-chip:hover { background:#DBEAFE; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- DB type selector -->
+<div style="display:flex;gap:10px;margin-bottom:18px;align-items:center">
+  <span style="font-size:12px;font-weight:600;color:var(--muted)">Database Type:</span>
+  <button id="btnOracle" class="btn btn-secondary" onclick="setDb('oracle',this)">🔶 Oracle</button>
+  <button id="btnPg"     class="btn btn-primary"   onclick="setDb('postgres',this)">🐘 PostgreSQL</button>
+  <span id="connStatus" style="margin-left:auto;font-size:12px;color:var(--muted)"></span>
+</div>
+
+<div class="gen-layout">
+
+  <!-- Instructions -->
+  <div class="section-card">
+    <h3 style="margin:0 0 4px;font-size:15px;color:var(--navy)">🤖 AI Query Generator — <span id="dbLabel">PostgreSQL</span></h3>
+    <p style="margin:0 0 16px;font-size:13px;color:var(--muted)">Generate SQL queries from natural language instructions using AI</p>
+
+    <div class="form-group">
+      <label class="form-label">Instructions</label>
+      <textarea class="form-textarea" id="instruction"
+        placeholder="Example: Get customers with most purchases&#10;Example: Find all users who joined in the last 30 days&#10;Example: Show top 10 products by revenue"></textarea>
+    </div>
+
+    <!-- Settings row — mirrors Streamlit col1/col2/col3 -->
+    <div class="settings-row">
+      <div>
+        <label class="form-label">Complexity</label>
+        <select class="form-select" id="complexity">
+          <option value="Simple">Simple</option>
+          <option value="Medium" selected>Medium</option>
+          <option value="Advanced">Advanced</option>
+        </select>
+      </div>
+      <div style="display:flex;flex-direction:column;justify-content:flex-end">
+        <div class="checkbox-row" style="margin:0">
+          <label><input type="checkbox" id="includeComments" checked> Include Comments</label>
+          <label><input type="checkbox" id="optimizeQuery" checked> Optimize Query</label>
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;justify-content:flex-end">
+        <div id="modelInfo" class="model-info">Loading…</div>
+      </div>
+    </div>
+
+    <!-- Action buttons — mirrors Streamlit col1/col2/col3 -->
+    <div class="action-row">
+      <button class="btn btn-primary" onclick="generateQuery()" id="btnGenerate">⚡ Generate Query</button>
+      <button class="btn btn-secondary" onclick="openSettings()">⚙️ Settings</button>
+    </div>
+  </div>
+
+  <!-- Generated SQL output -->
+  <div id="sqlOutputSection" style="display:none" class="section-card" style="padding:0">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <div>
+        <h4 style="margin:0;font-size:14px;color:var(--navy)">Generated SQL Query</h4>
+        <div id="safetyBadge" style="margin-top:6px"></div>
+      </div>
+    </div>
+
+    <!-- Dark SQL block with action buttons (mirrors Streamlit code + buttons) -->
+    <div class="sql-output-wrap">
+      <div class="sql-output-header">
+        <span class="sql-output-lang">SQL</span>
+        <div class="sql-output-btns">
+          <button class="sql-btn" onclick="copySql()">📋 Copy SQL</button>
+          <button class="sql-btn" onclick="openInEditor()">📝 Open in SQL Editor</button>
+          <button class="sql-btn" onclick="downloadSql()">💾 Download .sql</button>
+          <button class="sql-btn" onclick="regenerate()">🔄 Regenerate</button>
+        </div>
+      </div>
+      <div class="sql-code" id="sqlCode"></div>
+    </div>
+
+    <!-- Run query section — mirrors Streamlit -->
+    <div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+      <button class="btn btn-primary" onclick="runQuery()" id="btnRunQuery">▶️ Run Query</button>
+      <button class="btn btn-secondary" onclick="clearOutput()">🗑️ Clear</button>
+    </div>
+
+    <!-- Query results -->
+    <div id="queryResults" style="margin-top:10px"></div>
+  </div>
+
+  <!-- Example Instructions accordion (mirrors Streamlit expander) -->
+  <div>
+    <button class="examples-toggle" onclick="toggleExamples(this)">
+      💡 Example Instructions <span style="float:right">▼</span>
+    </button>
+    <div class="examples-body" id="examplesBody">
+      <strong>Basic Queries:</strong><br>
+      <span class="example-chip" onclick="useExample(this.textContent)">Find all active sessions in the database</span>
+      <span class="example-chip" onclick="useExample(this.textContent)">Show me the top 10 largest tables by size</span>
+      <span class="example-chip" onclick="useExample(this.textContent)">List all users and their privileges</span>
+      <br><br>
+      <strong>Analytical Queries:</strong><br>
+      <span class="example-chip" onclick="useExample(this.textContent)">Get customers with the most orders in the last month</span>
+      <span class="example-chip" onclick="useExample(this.textContent)">Show daily revenue trends for the past 30 days</span>
+      <span class="example-chip" onclick="useExample(this.textContent)">Find duplicate records in the users table</span>
+      <br><br>
+      <strong>Performance Queries:</strong><br>
+      <span class="example-chip" onclick="useExample(this.textContent)">Show queries running for more than 5 minutes</span>
+      <span class="example-chip" onclick="useExample(this.textContent)">Find tables with no indexes</span>
+      <span class="example-chip" onclick="useExample(this.textContent)">List all blocking sessions</span>
+      <br><br>
+      <strong id="dbSpecificTitle">PostgreSQL-Specific:</strong><br>
+      <div id="dbSpecificExamples">
+        <span class="example-chip" onclick="useExample(this.textContent)">Show database connections by application</span>
+        <span class="example-chip" onclick="useExample(this.textContent)">Find bloated tables</span>
+        <span class="example-chip" onclick="useExample(this.textContent)">Check vacuum statistics</span>
+      </div>
+    </div>
+  </div>
+
+</div><!-- /gen-layout -->
+
+<script>
+let currentDb  = 'postgres';
+let generatedSql = '';
+
+/* ── DB selector ─────────────────────────────── */
+function setDb(db, btn) {
+  currentDb = db;
+  document.getElementById('btnOracle').className = db==='oracle' ? 'btn btn-primary' : 'btn btn-secondary';
+  document.getElementById('btnPg').className      = db==='postgres' ? 'btn btn-primary' : 'btn btn-secondary';
+  document.getElementById('dbLabel').textContent   = db==='oracle' ? 'Oracle' : 'PostgreSQL';
+  updateDbExamples();
+}
+
+function updateDbExamples() {
+  const isOracle = currentDb === 'oracle';
+  document.getElementById('dbSpecificTitle').textContent = (isOracle ? 'Oracle' : 'PostgreSQL') + '-Specific:';
+  const chips = isOracle
+    ? ['Show tablespace usage and free space', 'Find invalid objects', 'Check for table/index fragmentation']
+    : ['Show database connections by application', 'Find bloated tables', 'Check vacuum statistics'];
+  document.getElementById('dbSpecificExamples').innerHTML = chips.map(c =>
+    `<span class="example-chip" onclick="useExample('${c}')">${c}</span>`
+  ).join('');
+}
+
+/* ── Load model info ────────────────────────────── */
+async function loadModelInfo() {
+  try {
+    const r = await fetch('/api/llm/config', { credentials: 'include' });
+    if (!r.ok) throw new Error('not ok');
+    const d = await r.json();
+    const cfg = d.config || {};
+    const label = (cfg.provider || '') + (cfg.model ? ' · ' + cfg.model : '');
+    document.getElementById('modelInfo').textContent = label || '(configure in LLM Settings)';
+  } catch(e) {
+    document.getElementById('modelInfo').textContent = '(configure in LLM Settings)';
+  }
+}
+
+function openSettings() {
+  window.location.href = '/llm-settings';
+}
+
+/* ── Generate ───────────────────────────────────── */
+async function generateQuery() {
+  const instruction = document.getElementById('instruction').value.trim();
+  if (!instruction) {
+    alert('⚠️ Please enter instructions for the query you want to generate');
+    return;
+  }
+  const btn = document.getElementById('btnGenerate');
+  btn.disabled = true;
+  btn.textContent = '⏳ Generating…';
+
+  try {
+    const token = getAuthToken();
+    const res   = await fetch('/api/query/generate', {
+      method: 'POST',
+      credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        prompt:           instruction,
+        db_type:          currentDb,
+        complexity:       document.getElementById('complexity').value,
+        include_comments: document.getElementById('includeComments').checked,
+        optimize_query:   document.getElementById('optimizeQuery').checked,
+      }),
+    });
+    const data = await res.json();
+
+    if (data.error) {
+      showError(data.error + (data.detail ? '\n\n' + data.detail : ''));
+    } else {
+      generatedSql = data.sql || '';
+      showSqlOutput(generatedSql, data.guardrail_checks);
+    }
+  } catch(e) {
+    showError('❌ Error generating query: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '⚡ Generate Query';
+  }
+}
+
+function showSqlOutput(sql, checks) {
+  document.getElementById('sqlCode').textContent = sql;
+  document.getElementById('sqlOutputSection').style.display = 'block';
+  document.getElementById('queryResults').innerHTML = '';
+  // Safety badge
+  const badge = document.getElementById('safetyBadge');
+  const passed = checks ? checks.filter(c=>c.passed).length : 0;
+  const total  = checks ? checks.length : 3;
+  badge.innerHTML = `<span class="safe-badge">✓ Query generated successfully and validated as safe! (${passed}/${total} guardrails passed)</span>`;
+  badge.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function showError(msg) {
+  document.getElementById('sqlOutputSection').style.display = 'none';
+  alert(msg);
+}
+
+/* ── Copy / Download / Editor ───────────────────── */
+function copySql() {
+  navigator.clipboard.writeText(generatedSql).then(() => showToast('✓ Copied to clipboard', 'success'));
+}
+
+function downloadSql() {
+  const ts  = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+  const fn  = `ai_generated_${ts}.sql`;
+  const a   = document.createElement('a');
+  a.href    = 'data:text/sql;charset=utf-8,' + encodeURIComponent(generatedSql);
+  a.download = fn;
+  a.click();
+}
+
+function openInEditor() {
+  sessionStorage.setItem('aqg_pending_sql', generatedSql);
+  window.location.href = '/explorer';
+}
+
+function regenerate() {
+  generateQuery();
+}
+
+function clearOutput() {
+  generatedSql = '';
+  document.getElementById('sqlOutputSection').style.display = 'none';
+  document.getElementById('queryResults').innerHTML = '';
+  document.getElementById('instruction').value = '';
+}
+
+/* ── Run Query (mirrors Streamlit "▶️ Run Query") ── */
+async function runQuery() {
+  if (!generatedSql) return;
+  const btn = document.getElementById('btnRunQuery');
+  btn.disabled = true;
+  btn.textContent = '⏳ Running…';
+  document.getElementById('queryResults').innerHTML =
+    '<div style="padding:10px;font-size:13px;color:var(--muted)">Executing…</div>';
+
+  try {
+    const token = getAuthToken();
+    const res   = await fetch('/api/query/execute', {
+      method: 'POST',
+      credentials: 'include', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sql: generatedSql, db_type: currentDb }),
+    });
+    const data  = await res.json();
+
+    if (data.error) {
+      document.getElementById('queryResults').innerHTML =
+        `<div style="padding:10px 14px;background:#FEF2F2;border:1px solid #FECACA;border-radius:8px;font-size:12px;color:#991B1B">❌ ${esc(data.error)}</div>`;
+    } else {
+      const cols = data.columns || [];
+      const rows = data.rows    || [];
+      const elapsed = data.elapsed_ms || 0;
+
+      if (!rows.length) {
+        document.getElementById('queryResults').innerHTML =
+          '<div style="padding:10px;font-size:13px;color:var(--muted)">Query executed successfully — no results returned.</div>';
+      } else {
+        let html = `<div style="padding:6px 12px;background:#ECFDF5;border:1px solid #A7F3D0;border-radius:6px;font-size:12px;color:#065F46;margin-bottom:8px">✓ Query executed in ${elapsed}ms</div>`;
+        html += '<div class="results-wrap"><table class="results-table"><thead><tr>';
+        html += cols.map(c => `<th>${esc(c)}</th>`).join('');
+        html += '</tr></thead><tbody>';
+        html += rows.map(r => '<tr>' + r.map(v => `<td>${esc(String(v??'NULL'))}</td>`).join('') + '</tr>').join('');
+        html += '</tbody></table>';
+        html += `<div class="results-meta">📊 Rows: ${rows.length} · Columns: ${cols.length} · Time: ${elapsed}ms</div>`;
+        html += '</div>';
+        document.getElementById('queryResults').innerHTML = html;
+      }
+    }
+  } catch(e) {
+    document.getElementById('queryResults').innerHTML =
+      `<div style="padding:10px;color:var(--danger)">❌ ${esc(e.message)}</div>`;
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '▶️ Run Query';
+  }
+}
+
+/* ── Examples accordion ─────────────────────────── */
+function toggleExamples(btn) {
+  const body = document.getElementById('examplesBody');
+  const open = body.style.display !== 'none' && body.style.display !== '';
+  body.style.display = open ? 'none' : 'block';
+  btn.querySelector('span').textContent = open ? '▼' : '▲';
+}
+
+function useExample(text) {
+  document.getElementById('instruction').value = text;
+}
+
+/* ── Helpers ────────────────────────────────────── */
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function getAuthToken() {
+  // JWT is stored in an HttpOnly cookie — cannot be read via JS.
+  // All fetch calls use credentials:'include' so the browser sends it automatically.
+  return '';
+}
+function showToast(msg, type='info') {
+  const t = document.createElement('div');
+  t.style.cssText = `position:fixed;bottom:20px;right:20px;z-index:9999;padding:10px 16px;border-radius:8px;font-size:13px;font-weight:500;box-shadow:0 4px 12px rgba(0,0,0,.15);background:${type==='success'?'#22C55E':type==='error'?'#EF4444':'#3B82F6'};color:#fff`;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(), 2500);
+}
+
+// Pick up SQL passed from AI Assistant / Explorer
+const pending = sessionStorage.getItem('aqg_pending_sql');
+if (pending) { sessionStorage.removeItem('aqg_pending_sql'); /* handled by SQL editor page */ }
+
+loadModelInfo();
+</script>
+{% endblock %}

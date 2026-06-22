@@ -1,0 +1,693 @@
+{% extends "base.html" %}
+{% block title %}DB Explorer — dbadeeds.ai{% endblock %}
+{% block page_title %}🔍 Database Explorer{% endblock %}
+{% set active_page = 'db_explorer' %}
+
+{% block head %}
+<script src="/static/js/conversations.js"></script>
+<style>
+  /* ── Tab bar ─────────────────────────────────────────────────── */
+  .etabs { display:flex; gap:0; border-bottom:2px solid var(--border); margin-bottom:20px; }
+  .etab  { padding:10px 22px; font-size:13px; font-weight:600; cursor:pointer;
+    border-bottom:3px solid transparent; margin-bottom:-2px; color:var(--muted);
+    transition:all .15s; background:none; border-left:none; border-right:none; border-top:none; }
+  .etab:hover  { color:var(--accent); }
+  .etab.active { color:var(--accent); border-bottom-color:var(--accent); }
+  .epanel { display:none; }
+  .epanel.active { display:block; }
+
+  /* ── SQL Editor ─────────────────────────────────────────────── */
+  .query-area { background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); padding:18px; }
+  .editor-toolbar { display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap; }
+  .editor-title { font-size:13px; font-weight:600; flex:1; }
+  textarea#sqlEditor {
+    width:100%; min-height:150px; font-family:var(--mono); font-size:13px;
+    background:#0F172A; color:#E2E8F0; border:1px solid #334155; border-radius:8px;
+    padding:14px; resize:vertical; line-height:1.6; box-sizing:border-box;
+  }
+  textarea#sqlEditor:focus { outline:none; border-color:var(--accent); }
+  .run-row { display:flex; align-items:center; gap:10px; margin-top:10px; flex-wrap:wrap; }
+  .ai-row  { display:flex; gap:10px; align-items:center; background:var(--bg);
+    border:1px solid var(--border); border-radius:8px; padding:12px; margin-top:12px; }
+  .ai-row input { flex:1; background:none; border:none; font-size:13px; color:var(--text); }
+  .ai-row input:focus { outline:none; }
+
+  /* ── Results ────────────────────────────────────────────────── */
+  .result-area { background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); padding:18px; margin-top:16px; }
+  .result-meta { font-size:11px; color:var(--muted); margin-bottom:10px; display:flex;
+    gap:16px; align-items:center; flex-wrap:wrap; }
+  .result-wrap { overflow:auto; max-height:440px; border:1px solid var(--border); border-radius:8px; }
+  .no-result { text-align:center; padding:40px; color:var(--muted); }
+
+  /* ── SQL Monitoring ─────────────────────────────────────────── */
+  .mon-toolbar { display:flex; gap:10px; align-items:center; margin-bottom:18px; flex-wrap:wrap; }
+  .time-btn { padding:6px 14px; border-radius:6px; border:1px solid var(--border);
+    background:var(--bg); font-size:12px; font-weight:600; cursor:pointer;
+    color:var(--text); transition:all .15s; }
+  .time-btn.sel { background:var(--accent); color:#fff; border-color:var(--accent); }
+
+  .metric-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr));
+    gap:12px; margin-bottom:20px; }
+  .metric-card { background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:16px 18px; text-align:center; box-shadow:var(--shadow); }
+  .metric-val  { font-family:var(--mono); font-size:28px; font-weight:700; color:var(--navy); }
+  .metric-lbl  { font-size:11px; color:var(--muted); text-transform:uppercase;
+    letter-spacing:.05em; margin-top:4px; }
+  .metric-sub  { font-size:11px; color:var(--success); margin-top:2px; }
+
+  .mon-section { margin-bottom:24px; }
+  .mon-title   { font-size:14px; font-weight:700; color:var(--navy); margin-bottom:10px;
+    padding-bottom:6px; border-bottom:1px solid var(--border); }
+
+  .mon-table-wrap { overflow:auto; max-height:320px; border:1px solid var(--border); border-radius:8px; }
+  table.mon { border-collapse:collapse; font-size:12px; width:100%; }
+  table.mon th { background:#f8fafc; font-weight:600; color:var(--muted); text-transform:uppercase;
+    font-size:10px; padding:7px 12px; border-bottom:1px solid var(--border); text-align:left;
+    position:sticky; top:0; z-index:1; white-space:nowrap; }
+  table.mon td { padding:6px 12px; border-bottom:1px solid var(--border); font-size:12px;
+    font-family:var(--mono); max-width:280px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  table.mon tr:last-child td { border-bottom:none; }
+  table.mon tr:hover td { background:#f9fafb; }
+
+  .loading-spinner { display:flex; align-items:center; justify-content:center; padding:40px;
+    color:var(--muted); gap:10px; font-size:13px; }
+  .auto-badge { background:#f0fdf4; border:1px solid #bbf7d0; color:#166534;
+    font-size:11px; padding:3px 8px; border-radius:4px; font-weight:600; }
+
+  /* ── Shared table ───────────────────────────────────────────── */
+  table { border-collapse:collapse; font-size:12px; width:100%; }
+  th { background:#f8fafc; font-weight:600; color:var(--muted); text-transform:uppercase;
+    font-size:10px; padding:8px 12px; border-bottom:1px solid var(--border); text-align:left;
+    position:sticky; top:0; z-index:1; white-space:nowrap; }
+  td { padding:7px 12px; border-bottom:1px solid var(--border); }
+  tr:last-child td { border-bottom:none; }
+  tr:hover td { background:#f9fafb; }
+  .mono-cell { font-family:var(--mono); font-size:11px; max-width:320px;
+    overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+  /* ── Performance Charts ─────────────────────────────────────── */
+  .charts-section { margin-bottom:28px; }
+  .charts-title { font-size:16px; font-weight:700; color:var(--navy); margin-bottom:18px;
+    display:flex; align-items:center; gap:8px; }
+  .charts-grid { display:grid; grid-template-columns:1fr 1fr; gap:20px; }
+  @media(max-width:800px){ .charts-grid { grid-template-columns:1fr; } }
+  .chart-card { background:var(--surface); border:1px solid var(--border);
+    border-radius:var(--radius); padding:20px; }
+  .chart-card-title { font-size:13px; font-weight:700; color:var(--navy); margin-bottom:4px; display:flex; align-items:center; gap:6px; }
+  .chart-card-sub   { font-size:11px; color:var(--muted); margin-bottom:14px; font-weight:600;
+    text-transform:uppercase; letter-spacing:.04em; }
+  .chart-wrap { position:relative; height:220px; }
+</style>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+{% endblock %}
+
+{% block content %}
+<div id="explorer-conn-bar"></div>
+
+<!-- ── Explorer Tab Bar ──────────────────────────────────────────── -->
+<div class="etabs">
+  <button class="etab active" id="etab-editor"   onclick="explorerTab('editor')">✍️ SQL Editor</button>
+  <button class="etab"        id="etab-monitor"  onclick="explorerTab('monitor')">📊 Live SQL Monitoring</button>
+</div>
+
+<!-- ══ SQL EDITOR PANEL ════════════════════════════════════════════ -->
+<div class="epanel active" id="epanel-editor">
+  <div class="query-area">
+    <div class="editor-toolbar">
+      <span class="editor-title">SQL Editor</span>
+      <span class="conv-title" id="convTitle" style="font-size:11px;color:var(--muted);margin-right:4px"></span>
+      <button class="conv-btn green btn-sm" onclick="Convs.saveNow()" style="padding:3px 9px;font-size:11px">&#128190; Save</button>
+      <button class="conv-btn btn-sm"       onclick="Convs.saveAs()"  style="padding:3px 9px;font-size:11px">&#128190; Save As…</button>
+      <button class="conv-btn btn-sm"       onclick="Convs.openPanel()" data-conv-open style="padding:3px 9px;font-size:11px">&#128194; Open</button>
+      <button class="conv-btn btn-sm"       onclick="Convs.newSession()" style="padding:3px 9px;font-size:11px">+ New</button>
+      <div style="flex:1"></div>
+      <span style="font-size:11px;color:var(--muted)">
+        <kbd style="background:var(--bg);padding:2px 6px;border:1px solid var(--border);border-radius:3px">Ctrl+Enter</kbd> to run
+      </span>
+      <button class="btn btn-secondary btn-sm" onclick="clearEditor()">Clear</button>
+    </div>
+    <textarea id="sqlEditor" placeholder="-- Enter your SELECT query here&#10;SELECT * FROM pg_stat_activity LIMIT 10;"></textarea>
+
+    <div class="run-row">
+      <select class="form-select" id="dbType" style="width:180px">
+        <option value="postgres">🐘 PostgreSQL</option>
+        <option value="oracle">🔶 Oracle</option>
+      </select>
+      <button class="btn btn-primary"   onclick="runQuery()">▶ Run Query</button>
+      <button class="btn btn-secondary" onclick="explainQuery()">📋 Explain</button>
+      <div style="flex:1"></div>
+      <div style="display:flex;gap:6px;align-items:center" title="Active guardrails on every query">
+        <span style="font-size:10px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.05em">Guardrails</span>
+        <span style="font-size:10px;padding:2px 7px;border-radius:4px;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;font-weight:600" title="SQL Safety: blocks DROP/DELETE/DDL/dangerous functions">🔒 SQL Safety</span>
+        <span style="font-size:10px;padding:2px 7px;border-radius:4px;background:#ede9fe;color:#5b21b6;border:1px solid #c4b5fd;font-weight:600" title="PII Blacklist: blocks PII tables, redacts PII columns">🛡️ PII</span>
+      </div>
+      <span id="runStatus" style="font-size:12px;color:var(--muted)"></span>
+    </div>
+
+    <!-- AI SQL generation -->
+    <div class="ai-row">
+      <span style="font-size:13px;color:var(--muted);white-space:nowrap">🤖 Generate SQL:</span>
+      <input id="aiPrompt" placeholder="Describe what you want… e.g. 'show top 10 slowest queries'"
+        onkeydown="if(event.key==='Enter') generateSQL()"/>
+      <button class="btn btn-secondary btn-sm" onclick="generateSQL()">Generate</button>
+    </div>
+  </div>
+
+  <div class="result-area" id="resultArea">
+    <div class="no-result">
+      <div style="font-size:32px;margin-bottom:10px">🔍</div>
+      <p>Run a query to see results here</p>
+    </div>
+  </div>
+</div>
+
+<!-- ══ SQL MONITORING PANEL ════════════════════════════════════════ -->
+<div class="epanel" id="epanel-monitor">
+
+  <!-- Toolbar -->
+  <div class="mon-toolbar">
+    <select class="form-select" id="monDbType" style="width:180px" onchange="loadMonitor()">
+      <option value="postgres">🐘 PostgreSQL</option>
+      <option value="oracle">🔶 Oracle</option>
+    </select>
+    <button class="time-btn sel" id="tbtn-1h"  onclick="setTimeRange('1h',  this)">⏱ Last Hour</button>
+    <button class="time-btn"     id="tbtn-24h" onclick="setTimeRange('24h', this)">📆 24 Hours</button>
+    <button class="time-btn"     id="tbtn-7d"  onclick="setTimeRange('7d',  this)">📅 7 Days</button>
+    <div style="flex:1"></div>
+    <button class="btn btn-primary btn-sm" onclick="loadMonitor()">🔄 Refresh</button>
+    <button class="btn btn-secondary btn-sm" id="autoBtn" onclick="toggleAuto()">▶ Auto (30s)</button>
+  </div>
+
+  <!-- KPI cards -->
+  <div class="metric-grid" id="metricGrid">
+    <div class="metric-card"><div class="metric-val" id="m-active">–</div><div class="metric-lbl">Active Sessions</div><div class="metric-sub">Live</div></div>
+    <div class="metric-card"><div class="metric-val" id="m-total">–</div><div class="metric-lbl" id="m-total-lbl">Total Sessions</div></div>
+    <div class="metric-card"><div class="metric-val" id="m-wait">–</div><div class="metric-lbl">Waiting</div></div>
+    <div class="metric-card"><div class="metric-val" id="m-time">–</div><div class="metric-lbl">Last Updated</div></div>
+  </div>
+
+  <!-- Performance Charts -->
+  <div class="charts-section" id="perfCharts" style="display:none">
+    <div class="charts-title">📊 Performance Charts</div>
+    <div class="charts-grid">
+      <div class="chart-card">
+        <div class="chart-card-title">📈 Session Activity Trend</div>
+        <div class="chart-card-sub">Connections by Database</div>
+        <div class="chart-wrap"><canvas id="chartConnections"></canvas></div>
+      </div>
+      <div class="chart-card">
+        <div class="chart-card-title">⏱ Wait Events / Resource Usage</div>
+        <div class="chart-card-sub">Database Operations</div>
+        <div class="chart-wrap"><canvas id="chartOperations"></canvas></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Monitoring sections -->
+  <div id="monitorSections">
+    <div class="loading-spinner"><div class="spinner"></div> Loading monitoring data…</div>
+  </div>
+
+</div>
+
+<script>
+/* ──────────────────────────────── Tab switching ─────────────────── */
+function explorerTab(name) {
+  document.querySelectorAll('.etab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.epanel').forEach(p => p.classList.remove('active'));
+  document.getElementById('etab-'  + name).classList.add('active');
+  document.getElementById('epanel-'+ name).classList.add('active');
+  if (name === 'monitor') loadMonitor();
+}
+
+/* ──────────────────────────────── SQL Editor ────────────────────── */
+document.getElementById('sqlEditor').addEventListener('keydown', e => {
+  if (e.ctrlKey && e.key === 'Enter') { e.preventDefault(); runQuery(); }
+});
+
+async function runQuery() {
+  const sql    = document.getElementById('sqlEditor').value.trim();
+  const dbType = document.getElementById('dbType').value;
+  if (!sql) return;
+  setStatus('Running…');
+  const d = await api('POST', '/query/execute', { sql, db_type: dbType });
+  setStatus('');
+  if (!d) return;
+
+  const area = document.getElementById('resultArea');
+  if (d.error) {
+    area.innerHTML = `<div class="alert alert-danger">⚠️ ${esc(d.error)}</div>
+      ${d.detail ? `<div style="font-family:var(--mono);font-size:12px;color:var(--muted);margin-top:8px">${esc(d.detail)}</div>` : ''}`;
+    return;
+  }
+  if (!d.columns || !d.columns.length) {
+    area.innerHTML = `<div class="alert alert-success">✅ Query executed — no rows returned (${d.execution_time_ms}ms)</div>`;
+    return;
+  }
+  const rows = d.rows || [];
+  const tbody = rows.map(row => `<tr>${row.map(v => `<td class="mono-cell" title="${esc(v??'')}">${esc(v??'')}</td>`).join('')}</tr>`).join('');
+  area.innerHTML = `
+    <div class="result-meta">
+      <span>📊 <strong>${rows.length}</strong> rows</span>
+      <span>⏱ ${d.execution_time_ms}ms</span>
+      <span>🗃 ${dbType.toUpperCase()}</span>
+      <div style="flex:1"></div>
+      <button class="btn btn-secondary btn-sm" onclick='dlCSV(${JSON.stringify(d.columns)},${JSON.stringify(d.rows)})'>⬇️ CSV</button>
+    </div>
+    ${d.pii_warning ? `<div style="background:#fffbeb;border:1px solid #fbbf24;border-radius:6px;padding:9px 14px;margin-bottom:10px;font-size:12px;color:#92400e;display:flex;align-items:center;gap:8px">
+      🛡️ <strong>PII Guardrail Active</strong> — ${esc((d.pii_columns||[]).join(', '))} column(s) have been SHA-256 hashed.
+      <a href="/guardrails" style="color:#0ea5e9;margin-left:6px;font-size:11px" target="_blank">View Guardrails →</a>
+    </div>` : ''}
+    <div class="result-wrap">
+      <table>
+        <thead><tr>${d.columns.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead>
+        <tbody>${tbody}</tbody>
+      </table>
+    </div>`;
+}
+
+async function explainQuery() {
+  const sql    = document.getElementById('sqlEditor').value.trim();
+  const dbType = document.getElementById('dbType').value;
+  if (!sql) return;
+  setStatus('Explaining…');
+  const d = await api('POST', '/query/explain', { sql, db_type: dbType });
+  setStatus('');
+  if (!d) return;
+  const area = document.getElementById('resultArea');
+  if (d.error) { area.innerHTML = `<div class="alert alert-danger">⚠️ ${esc(d.error)}</div>`; return; }
+  const rows = (d.plan||[]).map(r=>`<tr>${r.map(v=>`<td class="mono-cell">${esc(v??'')}</td>`).join('')}</tr>`).join('');
+  area.innerHTML = `<div style="font-weight:600;margin-bottom:10px">📋 Query Execution Plan</div>
+    <div class="result-wrap"><table>
+      <thead><tr>${(d.columns||['Plan']).map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead>
+      <tbody>${rows}</tbody>
+    </table></div>`;
+}
+
+async function generateSQL() {
+  const prompt = document.getElementById('aiPrompt').value.trim();
+  const dbType = document.getElementById('dbType').value;
+  if (!prompt) return;
+  setStatus('Generating SQL…');
+  const d = await api('POST', '/query/generate', { prompt, db_type: dbType });
+  setStatus('');
+  if (!d) return;
+  if (d.error) { showToast(d.error, 'danger'); return; }
+  document.getElementById('sqlEditor').value = d.sql;
+  showToast('SQL generated — review before running', 'info');
+}
+
+function clearEditor() {
+  document.getElementById('sqlEditor').value = '';
+  document.getElementById('resultArea').innerHTML =
+    '<div class="no-result"><div style="font-size:32px;margin-bottom:10px">🔍</div><p>Run a query to see results here</p></div>';
+}
+function setStatus(msg) { document.getElementById('runStatus').textContent = msg; }
+
+/* ──────────────────────────────── Monitoring ────────────────────── */
+let monTimeRange = '1h';
+let autoInterval = null;
+
+function setTimeRange(range, btn) {
+  monTimeRange = range;
+  document.querySelectorAll('.time-btn').forEach(b => b.classList.remove('sel'));
+  btn.classList.add('sel');
+  loadMonitor();
+}
+
+function toggleAuto() {
+  const btn = document.getElementById('autoBtn');
+  if (autoInterval) {
+    clearInterval(autoInterval); autoInterval = null;
+    btn.textContent = '▶ Auto (30s)';
+    btn.classList.remove('auto-badge');
+  } else {
+    autoInterval = setInterval(loadMonitor, 30000);
+    btn.textContent = '⏹ Stop Auto';
+    btn.classList.add('auto-badge');
+    loadMonitor();
+  }
+}
+
+// Monitoring SQL definitions
+const MONITOR_QUERIES = {
+  oracle: [
+    { key:'active_sessions',   label:'🟢 Active Sessions & Wait Events',
+      sql:`SELECT s.sid, s.serial#, s.username, s.status, s.machine,
+  s.program, s.wait_class, s.event,
+  ROUND(s.seconds_in_wait,0) as wait_secs,
+  SUBSTR(q.sql_text,1,120) as sql_text
+FROM v$session s
+LEFT JOIN v$sql q ON s.sql_id = q.sql_id
+WHERE s.status = 'ACTIVE' AND s.username IS NOT NULL
+ORDER BY s.seconds_in_wait DESC NULLS LAST
+FETCH FIRST 20 ROWS ONLY` },
+    { key:'top_sql',           label:'🔝 Top SQL by Executions (v$sql)',
+      sql:`SELECT sql_id,
+  executions,
+  ROUND(elapsed_time/1000000,2) as elapsed_sec,
+  ROUND(cpu_time/1000000,2) as cpu_sec,
+  buffer_gets, disk_reads,
+  SUBSTR(sql_text,1,120) as sql_text
+FROM v$sql
+WHERE executions > 0
+ORDER BY executions DESC
+FETCH FIRST 15 ROWS ONLY` },
+    { key:'wait_events',       label:'⏳ Current Wait Events',
+      sql:`SELECT wait_class, event, COUNT(*) as sessions,
+  ROUND(AVG(seconds_in_wait),2) as avg_wait_sec
+FROM v$session
+WHERE wait_class != 'Idle' AND username IS NOT NULL
+GROUP BY wait_class, event
+ORDER BY sessions DESC
+FETCH FIRST 15 ROWS ONLY` },
+    { key:'tablespace',        label:'💾 Tablespace Usage',
+      sql:`SELECT tablespace_name,
+  ROUND(used_space*8192/1024/1024,1) as used_mb,
+  ROUND(tablespace_size*8192/1024/1024,1) as total_mb,
+  ROUND(used_percent,1) as used_pct
+FROM dba_tablespace_usage_metrics
+ORDER BY used_percent DESC` },
+    { key:'long_running',      label:'⚠️ Long Running SQL (>30s)',
+      sql:`SELECT s.sid, s.serial#, s.username, s.machine,
+  ROUND(s.seconds_in_wait,0) as wait_sec,
+  SUBSTR(q.sql_text,1,150) as sql_text,
+  s.status, s.event
+FROM v$session s
+JOIN v$sql q ON s.sql_id = q.sql_id
+WHERE s.username IS NOT NULL
+AND s.seconds_in_wait > 30
+AND s.status = 'ACTIVE'
+ORDER BY wait_sec DESC` },
+  ],
+  postgres: [
+    { key:'active_sessions',   label:'🟢 Active Sessions',
+      sql:`SELECT pid, usename, application_name, client_addr,
+  state, wait_event_type, wait_event,
+  ROUND(EXTRACT(EPOCH FROM (NOW()-query_start))::numeric,1) as duration_sec,
+  LEFT(query,120) as query_text
+FROM pg_stat_activity
+WHERE state != 'idle' AND pid != pg_backend_pid()
+ORDER BY duration_sec DESC NULLS LAST
+LIMIT 20` },
+    { key:'long_running',      label:'⚠️ Long Running Queries (>5s)',
+      sql:`SELECT pid, usename, application_name, client_addr,
+  state, wait_event,
+  ROUND(EXTRACT(EPOCH FROM (NOW()-query_start))::numeric,1) as duration_sec,
+  LEFT(query,150) as query_text
+FROM pg_stat_activity
+WHERE state != 'idle'
+  AND query_start < NOW() - INTERVAL '5 seconds'
+  AND pid != pg_backend_pid()
+ORDER BY duration_sec DESC
+LIMIT 15` },
+    { key:'blocking',          label:'🚫 Blocking Queries',
+      sql:`SELECT bl.pid as blocked_pid, a.usename as blocked_user,
+  ka.query as current_statement_in_blocking_process,
+  a.query as blocked_statement
+FROM pg_catalog.pg_locks bl
+JOIN pg_catalog.pg_stat_activity a  ON bl.pid = a.pid
+JOIN pg_catalog.pg_locks           kl ON kl.transactionid = bl.transactionid AND kl.pid != bl.pid
+JOIN pg_catalog.pg_stat_activity  ka  ON kl.pid = ka.pid
+WHERE NOT bl.granted LIMIT 20` },
+    { key:'table_stats',       label:'📊 Table Access Statistics',
+      sql:`SELECT schemaname, relname as table_name,
+  seq_scan, idx_scan,
+  n_tup_ins as inserts, n_tup_upd as updates, n_tup_del as deletes,
+  pg_size_pretty(pg_total_relation_size(relid)) as total_size,
+  n_live_tup as live_rows, n_dead_tup as dead_rows
+FROM pg_stat_user_tables
+ORDER BY seq_scan + COALESCE(idx_scan,0) DESC
+LIMIT 20` },
+    { key:'connection_stats',  label:'🔌 Connection Statistics by Database',
+      sql:`SELECT datname,
+  COUNT(*) as total_connections,
+  COUNT(*) FILTER (WHERE state='active') as active,
+  COUNT(*) FILTER (WHERE state='idle') as idle,
+  COUNT(*) FILTER (WHERE wait_event IS NOT NULL) as waiting
+FROM pg_stat_activity
+GROUP BY datname
+ORDER BY total_connections DESC` },
+    { key:'index_usage',       label:'📇 Index Usage',
+      sql:`SELECT schemaname, tablename, indexname,
+  idx_scan as scans,
+  idx_tup_read as tuples_read,
+  idx_tup_fetch as tuples_fetched,
+  pg_size_pretty(pg_relation_size(indexrelid)) as index_size
+FROM pg_stat_user_indexes
+ORDER BY idx_scan DESC
+LIMIT 20` },
+  ],
+};
+
+const KPI_QUERIES = {
+  oracle: {
+    active: `SELECT COUNT(*) FROM v$session WHERE status='ACTIVE' AND username IS NOT NULL`,
+    total:  `SELECT COUNT(*) FROM v$session WHERE username IS NOT NULL`,
+    wait:   `SELECT COUNT(*) FROM v$session WHERE wait_class != 'Idle' AND username IS NOT NULL`,
+  },
+  postgres: {
+    active: `SELECT COUNT(*) FROM pg_stat_activity WHERE state='active' AND pid != pg_backend_pid()`,
+    total:  `SELECT pg_size_pretty(pg_database_size(current_database()))`,
+    wait:   `SELECT COUNT(*) FROM pg_stat_activity WHERE wait_event IS NOT NULL AND pid != pg_backend_pid()`,
+  },
+};
+
+
+/* ──────────────────────────────── Performance Charts ────────────── */
+let chartConn = null;
+let chartOps  = null;
+
+function initCharts() {
+  const connCtx = document.getElementById('chartConnections').getContext('2d');
+  const opsCtx  = document.getElementById('chartOperations').getContext('2d');
+
+  Chart.defaults.font.family = "'Inter','system-ui',sans-serif";
+  Chart.defaults.font.size   = 11;
+
+  chartConn = new Chart(connCtx, {
+    type: 'bar',
+    data: { labels: [], datasets: [
+      { label:'Total',  data:[], backgroundColor:'#3B82F6', borderRadius:4 },
+      { label:'Active', data:[], backgroundColor:'#22C55E', borderRadius:4 },
+    ]},
+    options: {
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ position:'right', labels:{ boxWidth:12, padding:12 }}},
+      scales:{
+        x:{ title:{ display:true, text:'Database', color:'#94a3b8' },
+          grid:{ display:false } },
+        y:{ title:{ display:true, text:'Connection Count', color:'#94a3b8' },
+          beginAtZero:true, grid:{ color:'#f1f5f9' } },
+      },
+    },
+  });
+
+  chartOps = new Chart(opsCtx, {
+    type: 'bar',
+    data: { labels:['Seq Scans','Index Scans','Inserts','Updates','Deletes'],
+      datasets:[{ label:'Count', data:[0,0,0,0,0],
+        backgroundColor:['#3B82F6','#22C55E','#F97316','#A78BFA','#F43F5E'],
+        borderRadius:4 }]
+    },
+    options:{
+      responsive:true, maintainAspectRatio:false,
+      plugins:{ legend:{ display:false }},
+      scales:{
+        x:{ title:{ display:true, text:'Operation Type', color:'#94a3b8' },
+          grid:{ display:false } },
+        y:{ title:{ display:true, text:'Count', color:'#94a3b8' },
+          beginAtZero:true, grid:{ color:'#f1f5f9' },
+          ticks:{ callback: v => v >= 1e6 ? (v/1e6).toFixed(0)+'M' : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : v }
+        },
+      },
+    },
+  });
+}
+
+function updateCharts(dbType, monData) {
+  // Show charts section
+  document.getElementById('perfCharts').style.display = 'block';
+
+  // ── Chart 1: Connections by Database ─────────────────────────
+  if (monData.connection_stats) {
+    const labels = monData.connection_stats.rows.map(r => r[0] || 'unknown');
+    const totals = monData.connection_stats.rows.map(r => parseInt(r[1]) || 0);
+    const active = monData.connection_stats.rows.map(r => parseInt(r[2]) || 0);
+    chartConn.data.labels = labels;
+    chartConn.data.datasets[0].data = totals;
+    chartConn.data.datasets[1].data = active;
+    chartConn.update('active');
+  } else if (dbType === 'oracle' && monData.active_sessions) {
+    // Oracle: summarise active sessions by machine
+    const machines = {};
+    for (const r of monData.active_sessions.rows) {
+      const m = r[4] || 'unknown';
+      machines[m] = (machines[m] || 0) + 1;
+    }
+    chartConn.data.labels = Object.keys(machines);
+    chartConn.data.datasets[0].data = Object.values(machines);
+    chartConn.data.datasets[1].data = Object.values(machines); // all active
+    chartConn.update('active');
+  }
+
+  // ── Chart 2: Database Operations ─────────────────────────────
+  if (monData.table_stats) {
+    let seqScan=0, idxScan=0, ins=0, upd=0, del=0;
+    for (const r of monData.table_stats.rows) {
+      seqScan += parseInt(r[2]) || 0;
+      idxScan += parseInt(r[3]) || 0;
+      ins     += parseInt(r[4]) || 0;
+      upd     += parseInt(r[5]) || 0;
+      del     += parseInt(r[6]) || 0;
+    }
+    chartOps.data.datasets[0].data = [seqScan, idxScan, ins, upd, del];
+    chartOps.update('active');
+  } else if (dbType === 'oracle' && monData.wait_events) {
+    // Oracle: show wait event sessions per wait class
+    const classes = {};
+    for (const r of monData.wait_events.rows) {
+      classes[r[0]] = (classes[r[0]] || 0) + (parseInt(r[2]) || 0);
+    }
+    const keys = Object.keys(classes).slice(0,5);
+    chartOps.data.labels = keys.length ? keys : ['No wait events'];
+    chartOps.data.datasets[0].data = keys.map(k => classes[k]);
+    chartOps.update('active');
+  }
+}
+
+async function loadMonitor() {
+  const dbType = document.getElementById('monDbType').value;
+  document.getElementById('m-time').textContent = new Date().toLocaleTimeString();
+  document.getElementById('m-total-lbl').textContent = dbType === 'oracle' ? 'Total Sessions' : 'DB Size';
+
+  // Load KPIs
+  loadKPI(dbType);
+
+  // Load monitoring sections
+  const sections = MONITOR_QUERIES[dbType] || [];
+  const container = document.getElementById('monitorSections');
+  container.innerHTML = sections.map(s => `
+    <div class="mon-section" id="msec_${s.key}">
+      <div class="mon-title">${s.label}</div>
+      <div class="loading-spinner"><div class="spinner"></div> Loading…</div>
+    </div>`).join('');
+
+  // Initialise charts on first load
+  if (!chartConn) initCharts();
+
+  // Collect raw data in parallel for charts
+  const monData = {};
+  const promises = sections.map(s =>
+    api('POST', '/query/execute', { sql: s.sql, db_type: dbType })
+      .then(d => { if (d && !d.error) monData[s.key] = d; })
+      .catch(() => {})
+  );
+
+  // Render tables as they come AND update charts when all done
+  for (const s of sections) {
+    runMonQuery(s.key, s.sql, dbType);
+  }
+  Promise.all(promises).then(() => updateCharts(dbType, monData));
+}
+
+async function loadKPI(dbType) {
+  const q = KPI_QUERIES[dbType];
+  // Active
+  const da = await api('POST', '/query/execute', { sql: q.active, db_type: dbType });
+  if (da && da.rows && da.rows[0]) document.getElementById('m-active').textContent = da.rows[0][0] ?? '–';
+  // Total / DB Size
+  const dt = await api('POST', '/query/execute', { sql: q.total, db_type: dbType });
+  if (dt && dt.rows && dt.rows[0]) document.getElementById('m-total').textContent = dt.rows[0][0] ?? '–';
+  // Waiting
+  const dw = await api('POST', '/query/execute', { sql: q.wait, db_type: dbType });
+  if (dw && dw.rows && dw.rows[0]) document.getElementById('m-wait').textContent = dw.rows[0][0] ?? '–';
+}
+
+async function runMonQuery(key, sql, dbType) {
+  const sec = document.getElementById('msec_' + key);
+  if (!sec) return;
+  const d = await api('POST', '/query/execute', { sql, db_type: dbType });
+  if (!d) {
+    sec.querySelector('.loading-spinner').innerHTML = '<span style="color:var(--muted)">No active connection</span>';
+    return;
+  }
+  if (d.error) {
+    sec.innerHTML = `<div class="mon-title">${sec.querySelector('.mon-title')?.textContent || key}</div>
+      <div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;padding:10px 14px;font-size:12px;color:#991b1b">
+        ⚠️ ${esc(d.error)}</div>`;
+    return;
+  }
+  const rows = d.rows || [];
+  const cols = d.columns || [];
+  const title = sec.querySelector('.mon-title')?.textContent || key;
+  if (!rows.length) {
+    sec.innerHTML = `<div class="mon-title">${title}</div>
+      <div style="color:var(--muted);font-size:13px;padding:12px 0">✅ No rows returned — all clear</div>`;
+    return;
+  }
+  const tbody = rows.map(r => `<tr>${r.map(v => `<td title="${esc(v??'')}">${esc(v??'')}</td>`).join('')}</tr>`).join('');
+  sec.innerHTML = `
+    <div class="mon-title" style="display:flex;align-items:center;gap:10px">
+      ${title}
+      <span style="color:var(--muted);font-size:11px;font-weight:400">${rows.length} rows · ${d.execution_time_ms}ms</span>
+      <button class="btn btn-secondary btn-sm" style="margin-left:auto"
+        onclick='dlCSV(${JSON.stringify(cols)},${JSON.stringify(rows)},"${key}")'>⬇️ CSV</button>
+    </div>
+    <div class="mon-table-wrap">
+      <table class="mon">
+        <thead><tr>${cols.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead>
+        <tbody>${tbody}</tbody>
+      </table>
+    </div>`;
+}
+
+/* ──────────────────────────────── Shared helpers ───────────────── */
+function dlCSV(cols, rows, name='query') {
+  const header = cols.map(c => `"${String(c).replace(/"/g,'""')}"`).join(',');
+  const body   = rows.map(r => r.map(v => `"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob   = new Blob([header+'\n'+body], { type:'text/csv' });
+  const a      = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download   = `${name}_${new Date().toISOString().slice(0,10)}.csv`; a.click();
+}
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+window.addEventListener('DOMContentLoaded', function(){
+  loadConnBar('explorer-conn-bar');
+  // Conversations: save / open / new
+  Convs.init({
+    module:     'sql_editor',
+    titleElId:  'convTitle',
+    getDataFn:  () => ({
+      sql:     document.getElementById('sqlEditor').value,
+      db_type: document.getElementById('dbType').value,
+    }),
+    loadDataFn: (data) => {
+      if(data.sql)     document.getElementById('sqlEditor').value = data.sql;
+      if(data.db_type) document.getElementById('dbType').value    = data.db_type;
+      if(typeof showToast==='function') showToast('Query loaded','info');
+    },
+    onNew: () => {
+      document.getElementById('sqlEditor').value = '';
+      document.getElementById('resultArea').innerHTML =
+        '<div class="no-result"><div style="font-size:32px;margin-bottom:10px">🔍</div><p>Run a query to see results here</p></div>';
+    },
+  });
+
+  // Pick up SQL sent from AI Query Generator
+  const pendingSql = sessionStorage.getItem('aqg_pending_sql');
+  if (pendingSql) {
+    document.getElementById('sqlEditor').value = pendingSql;
+    const db = sessionStorage.getItem('aqg_pending_db') || 'postgres';
+    document.getElementById('dbType').value = db;
+    sessionStorage.removeItem('aqg_pending_sql');
+    sessionStorage.removeItem('aqg_pending_db');
+    showToast('SQL loaded from AI Query Generator', 'success');
+  }
+});
+</script>
+{% endblock %}

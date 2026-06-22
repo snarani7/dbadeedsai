@@ -1,0 +1,164 @@
+{
+  "_comment": "PII Blacklist Configuration - Tables and Columns containing sensitive data",
+  "_usage": "Add your PII tables and columns here to prevent data exposure to LLM",
+  
+  "pii_protection": {
+    "enabled": true,
+    "mode": "block_and_redact",
+    "_mode_options": [
+      "block - Block any query accessing PII tables/columns",
+      "redact - Allow query but redact PII data before LLM",
+      "block_and_redact - Block if possible, redact if needed"
+    ]
+  },
+  
+  "blocked_tables": {
+    "_description": "Tables that should NEVER be queried (complete block)",
+    "oracle": [
+      "EMPLOYEES",
+      "CUSTOMERS",
+      "USERS",
+      "PATIENT_RECORDS",
+      "FINANCIAL_TRANSACTIONS"
+    ],
+    "postgresql": [
+      "employees",
+      "customers", 
+      "users",
+      "patient_records",
+      "financial_transactions"
+    ]
+  },
+  
+  "pii_tables_and_columns": {
+    "_description": "Tables with specific PII columns (query allowed but columns redacted)",
+    "oracle": {
+      "EMPLOYEES": [
+        "SSN",
+        "EMAIL",
+        "PHONE",
+        "HOME_ADDRESS",
+        "SALARY",
+        "BANK_ACCOUNT",
+        "DATE_OF_BIRTH"
+      ],
+      "CUSTOMERS": [
+        "EMAIL",
+        "PHONE",
+        "CREDIT_CARD",
+        "SSN",
+        "ADDRESS",
+        "IP_ADDRESS"
+      ],
+      "ORDERS": [
+        "CUSTOMER_EMAIL",
+        "SHIPPING_ADDRESS",
+        "BILLING_ADDRESS",
+        "CREDIT_CARD_LAST4"
+      ],
+      "HR_RECORDS": [
+        "EMPLOYEE_SSN",
+        "HOME_PHONE",
+        "EMERGENCY_CONTACT",
+        "PASSPORT_NUMBER",
+        "DRIVERS_LICENSE"
+      ]
+    },
+    "postgresql": {
+      "employees": [
+        "ssn",
+        "email",
+        "phone",
+        "home_address",
+        "salary",
+        "bank_account",
+        "date_of_birth"
+      ],
+      "customers": [
+        "email",
+        "phone",
+        "credit_card",
+        "ssn",
+        "address",
+        "ip_address"
+      ],
+      "orders": [
+        "customer_email",
+        "shipping_address",
+        "billing_address",
+        "credit_card_last4"
+      ],
+      "hr_records": [
+        "employee_ssn",
+        "home_phone",
+        "emergency_contact",
+        "passport_number",
+        "drivers_license"
+      ]
+    }
+  },
+  
+  "pii_column_patterns": {
+    "_description": "Column name patterns that indicate PII (applies to ANY table)",
+    "patterns": [
+      "ssn",
+      "social_security",
+      "email",
+      "e_mail",
+      "phone",
+      "mobile",
+      "credit_card",
+      "cc_number",
+      "password",
+      "passwd",
+      "dob",
+      "birth_date",
+      "address",
+      "passport",
+      "driver_license",
+      "salary",
+      "compensation",
+      "bank_account"
+    ]
+  },
+  
+  "allowed_operations": {
+    "_description": "Operations allowed even on PII columns (aggregations are safe)",
+    "aggregations": [
+      "COUNT",
+      "AVG",
+      "SUM",
+      "MIN",
+      "MAX",
+      "STDDEV"
+    ],
+    "allow_aggregated_pii": true,
+    "_note": "Aggregated queries don't expose individual PII"
+  },
+  
+  "exemptions": {
+    "_description": "Users or roles exempt from PII restrictions",
+    "exempt_users": [
+      "admin",
+      "security_admin"
+    ],
+    "exempt_roles": [
+      "DBA",
+      "SECURITY_ANALYST"
+    ]
+  },
+  
+  "actions": {
+    "on_blocked_table": "block_query",
+    "on_pii_column": "redact_data",
+    "on_select_star": "warn_and_redact",
+    "_on_select_star_note": "SELECT * may include PII columns"
+  },
+  
+  "logging": {
+    "log_pii_access_attempts": true,
+    "log_blocked_queries": true,
+    "log_redacted_columns": true,
+    "pii_log_file": "logs/pii_access.log"
+  }
+}

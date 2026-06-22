@@ -1,0 +1,601 @@
+{% extends "base.html" %}
+{% block title %}AI Assistant{% endblock %}
+{% block head %}
+<script src="/static/js/conversations.js"></script>
+{% endblock %}
+
+{% block content %}
+
+<style>
+/* ── Layout ── */
+.ai-wrapper { display:flex; gap:0; height:calc(100vh - 120px); overflow:hidden; }
+.ai-left  { width:270px; min-width:270px; background:#F9FAFB; border-right:1px solid #E5E7EB;
+             border-radius:10px 0 0 10px; overflow-y:auto; padding:14px 10px; flex-shrink:0; }
+.ai-right { flex:1; display:flex; flex-direction:column; overflow:hidden; min-width:0; }
+
+/* ── DB selector cards ── */
+.db-cards { display:flex; gap:10px; padding:14px 16px 0; }
+.db-card  { flex:1; border:2px solid #E5E7EB; border-radius:10px; padding:12px 14px;
+             cursor:pointer; background:#fff; transition:all .15s; position:relative; }
+.db-card.active   { border-color:#EF4444; background:#FFF5F5; }
+.db-card.disabled { opacity:.55; cursor:not-allowed; }
+.db-card-icon  { font-size:22px; margin-bottom:4px; }
+.db-card-name  { font-weight:700; font-size:13px; color:#111827; }
+.db-card-host  { font-size:11px; color:#6B7280; font-family:monospace; margin-top:2px;
+                 overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.db-card-status { font-size:11px; margin-top:4px; }
+.db-card-status.ok  { color:#16A34A; }
+.db-card-status.off { color:#9CA3AF; }
+.db-selected-dot { position:absolute; top:8px; right:8px; width:8px; height:8px;
+                   border-radius:50%; background:#EF4444; }
+
+/* ── LLM pill ── */
+.llm-bar { display:flex; align-items:center; gap:10px; padding:8px 16px;
+           font-size:12px; color:#6B7280; border-bottom:1px solid #F1F5F9; }
+.llm-bar strong { color:#374151; }
+
+/* ── Connection banner ── */
+.conn-banner { display:flex; align-items:center; gap:8px; padding:8px 16px;
+               background:#F0FDF4; border-bottom:1px solid #BBF7D0;
+               font-size:12px; color:#15803D; }
+.conn-dot { width:8px; height:8px; border-radius:50%; background:#22C55E; flex-shrink:0; }
+
+/* ── Chat area ── */
+.chat-area { flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:12px; }
+.chat-toolbar { display:flex; align-items:center; justify-content:space-between;
+                padding:6px 16px; font-size:12px; color:#94A3B8; border-top:1px solid #F1F5F9; }
+.chat-input-bar { padding:10px 16px 14px; }
+.chat-input-bar input { width:100%; padding:10px 44px 10px 14px; border:1.5px solid #E5E7EB;
+                        border-radius:10px; font-size:13px; outline:none;
+                        font-family:inherit; background:#FAFAFA; }
+.chat-input-bar input:focus { border-color:#EF4444; background:#fff; }
+.input-wrap { position:relative; }
+.send-btn { position:absolute; right:8px; top:50%; transform:translateY(-50%);
+            background:#EF4444; border:none; border-radius:7px; width:30px; height:30px;
+            cursor:pointer; display:flex; align-items:center; justify-content:center; }
+.send-btn svg { width:14px; height:14px; fill:white; }
+.send-btn:disabled { background:#D1D5DB; cursor:not-allowed; }
+
+/* ── Bubbles ── */
+.msg { display:flex; gap:10px; }
+.msg.user { flex-direction:row-reverse; }
+.avatar { width:30px; height:30px; border-radius:50%; display:flex; align-items:center;
+          justify-content:center; font-size:14px; flex-shrink:0; }
+.avatar.ai   { background:linear-gradient(135deg,#EF4444,#F97316); }
+.avatar.user { background:#6366F1; }
+.bubble { max-width:85%; padding:10px 14px; border-radius:12px; font-size:13px; line-height:1.6; }
+.bubble.ai   { background:#F8FAFC; border:1px solid #E2E8F0; color:#1E293B; }
+.bubble.user { background:#6366F1; color:white; border-radius:12px 12px 2px 12px; }
+.bubble pre  { margin:8px 0; white-space:pre-wrap; }
+.bubble code { font-family:monospace; }
+
+/* ── SQL block ── */
+.sql-block { background:#0F172A; border-radius:8px; padding:12px; margin:8px 0;
+             font-family:monospace; font-size:11px; color:#94A3B8; line-height:1.5;
+             overflow-x:auto; white-space:pre-wrap; word-break:break-word; }
+.sql-label { font-size:11px; font-weight:700; color:#64748B; text-transform:uppercase;
+             letter-spacing:.05em; margin-bottom:4px; }
+
+/* ── Results table ── */
+.result-wrap { overflow-x:auto; margin:8px 0; }
+.result-table { width:100%; border-collapse:collapse; font-size:11px; font-family:monospace; }
+.result-table th { background:#1E293B; color:#94A3B8; padding:5px 10px; text-align:left;
+                   font-weight:600; font-size:10px; text-transform:uppercase; letter-spacing:.05em; }
+.result-table td { padding:4px 10px; color:#E2E8F0; border-bottom:1px solid #1E293B; }
+.result-table tr:nth-child(odd) td  { background:#0F172A; }
+.result-table tr:nth-child(even) td { background:#111827; }
+.result-meta { font-size:11px; color:#6B7280; margin-top:4px; }
+
+/* ── Step events ── */
+.step-event { display:flex; align-items:flex-start; gap:8px; margin:4px 0;
+              padding:6px 10px; border-radius:6px; font-size:11px; }
+.step-event.tool   { background:#EFF6FF; color:#1D4ED8; border-left:3px solid #3B82F6; }
+.step-event.obs    { background:#F0FDF4; color:#15803D; border-left:3px solid #22C55E; }
+.step-event pre    { margin:0; font-family:monospace; white-space:pre-wrap;
+                     word-break:break-word; font-size:10px; opacity:.85; }
+
+/* ── Left panel ── */
+.panel-header { color:#6B7280; font-size:10px; font-weight:700; text-transform:uppercase;
+                letter-spacing:.08em; margin:12px 0 6px; }
+.panel-btn { display:block; width:100%; text-align:left; background:#F3F4F6; color:#374151;
+             border:none; border-radius:8px; padding:7px 10px; font-size:11.5px;
+             font-weight:500; margin-bottom:3px; cursor:pointer; line-height:1.4;
+             white-space:normal; transition:background .1s; }
+.panel-btn:hover { background:#E5E7EB; }
+.rca-btn { background:#FFF7ED !important; color:#92400E !important; }
+.rca-btn:hover { background:#FED7AA !important; }
+.panel-divider { border:none; border-top:1px solid #E5E7EB; margin:10px 0; }
+.rca-textarea { width:100%; border:1px solid #E5E7EB; border-radius:8px; padding:8px;
+                font-size:11px; resize:vertical; min-height:70px; font-family:inherit;
+                background:#FAFAFA; color:#374151; box-sizing:border-box; }
+.rca-textarea:focus { outline:none; border-color:#F97316; }
+.rca-run-btn { width:100%; margin-top:4px; padding:6px; background:#F97316; color:white;
+               border:none; border-radius:8px; font-size:11.5px; font-weight:600;
+               cursor:pointer; }
+.rca-run-btn:hover { background:#EA580C; }
+
+/* ── Status line ── */
+.status-line { font-size:11px; color:#94A3B8; font-style:italic; display:flex;
+               align-items:center; gap:6px; }
+
+/* ── Misc ── */
+.cursor { display:inline-block; width:2px; height:12px; background:#374151;
+          animation:blink .7s infinite; vertical-align:text-bottom; }
+@keyframes blink { 50% { opacity:0; } }
+</style>
+
+<div style="padding:0 0 0 0">
+
+  <!-- DB type selector cards -->
+  <div class="db-cards" id="dbCards">
+    {% for c in db_cards %}
+    <div class="db-card {% if c.active %}active{% endif %} {% if not c.available %}disabled{% endif %}"
+         id="card_{{ c.key }}" onclick="selectDb('{{ c.key }}')">
+      {% if c.active %}<div class="db-selected-dot"></div>{% endif %}
+      <div class="db-card-icon">{{ c.icon }}</div>
+      <div class="db-card-name">{{ c.label }}</div>
+      <div class="db-card-host">{{ c.host }}</div>
+      <div class="db-card-status {% if c.available %}ok{% else %}off{% endif %}">
+        {{ '● Connected' if c.available else '○ Not configured' }}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+
+  <!-- LLM bar + guardrail badges -->
+  <div class="llm-bar" style="flex-wrap:wrap;gap:6px 16px;row-gap:6px">
+    <div style="display:flex;align-items:center;gap:10px;flex-shrink:0">
+      <span id="llmBarLabel">{% if ai_provider and ai_model %}{{ ai_provider|upper }} · {{ ai_model }}{% else %}⚠️ LLM not configured — <a href="/llm-settings" style="color:#EF4444">configure now</a>{% endif %}</span>
+      <a href="/llm-settings" style="color:#EF4444;text-decoration:none;font-size:11px">⚙️ Settings</a>
+    </div>
+    <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+      <div style="display:flex;gap:5px;align-items:center;padding:0 2px">
+        <span style="font-size:9px;color:var(--muted);font-weight:700;text-transform:uppercase;letter-spacing:.05em">Active guardrails:</span>
+        <span style="font-size:10px;padding:1px 7px;border-radius:4px;background:#fef3c7;color:#92400e;border:1px solid #fde68a;font-weight:600" title="Content Filter: blocks inappropriate or off-topic questions">🚫 Content Filter</span>
+        <span style="font-size:10px;padding:1px 7px;border-radius:4px;background:#fee2e2;color:#991b1b;border:1px solid #fca5a5;font-weight:600" title="SQL Safety: all generated SQL is validated before execution">🔒 SQL Safety</span>
+        <span style="font-size:10px;padding:1px 7px;border-radius:4px;background:#ede9fe;color:#5b21b6;border:1px solid #c4b5fd;font-weight:600" title="PII Blacklist: PII tables blocked, PII columns redacted">🛡️ PII</span>
+        <a href="/guardrails" target="_blank" style="font-size:10px;color:var(--muted);margin-left:4px;text-decoration:none" title="View guardrail settings">ℹ</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Main two-column layout -->
+  <div class="ai-wrapper">
+
+    <!-- LEFT PANEL -->
+    <div class="ai-left" id="leftPanel">
+
+      <!-- Quick suggestions — Oracle -->
+      <div id="suggestions_oracle" style="display:none">
+        <p class="panel-header">✨ Try asking</p>
+        {% set oracle_sugg = [
+          ('⚡','Are there any performance issues right now?','Are there any performance issues with my Oracle database right now?'),
+          ('🔍','Most expensive SQL statements','What are the most expensive SQL statements right now?'),
+          ('🔒','Active sessions & blocking locks','Show me active sessions and any blocking locks'),
+          ('📊','Tablespace usage across all tablespaces','What is the tablespace usage across all tablespaces?'),
+          ('🐢','Long running queries last hour','List long running queries from the last hour'),
+          ('🔄','Top wait events affecting performance','Show me top wait events affecting performance'),
+          ('💾','Full table scans — which tables?','Which tables have the highest number of full table scans?'),
+          ('🚨','Any invalid objects in the database?','Are there any invalid objects in the database?'),
+        ] %}
+        {% for icon, label, prompt in oracle_sugg %}
+        <button class="panel-btn" onclick='sendSuggestion({{ prompt|tojson }})'>{{ icon }} {{ label }}</button>
+        {% endfor %}
+
+        <hr class="panel-divider">
+        <p class="panel-header">🔬 Root Cause Analysis</p>
+        {% set oracle_rca = [
+          ('🔴','DB crashed / ORA- error','Perform a full Root Cause Analysis for an Oracle database crash or ORA- error. Check: (1) alert log for ORA- messages, (2) background process failures, (3) redo log status, (4) controlfile integrity. Provide: Likely Root Cause, Evidence to Confirm, Immediate Fix Steps, Preventive Measures.'),
+          ('🐢','Sudden performance degradation','Perform a Root Cause Analysis for sudden Oracle performance degradation. Investigate: (1) top wait events now vs historical baseline, (2) high-load SQL statements with execution plan changes, (3) latch contention, (4) I/O bottlenecks, (5) SGA/PGA pressure. Provide: Root Cause, Evidence Queries, Immediate Actions, Long-term Fix.'),
+          ('🔒','Locking / deadlock storm','Perform a Root Cause Analysis for an Oracle locking or deadlock issue. Investigate: (1) current blocking chains in v$session, (2) recent deadlock trace files in v$diag_info, (3) transactions holding locks longest, (4) application transaction patterns. Provide: Root Cause, Blocking Chain Details, Immediate Actions, Code/Index Fixes.'),
+          ('💾','Tablespace full / ORA-01653','Perform a Root Cause Analysis for Oracle tablespace full or ORA-01653 error. Investigate: (1) which tablespace is full and which objects grew, (2) recent data loading or batch jobs, (3) undo segment growth, (4) temp space usage. Provide: Root Cause, Space Analysis, Immediate Fix, Long-term Capacity Plan.'),
+          ('📉','High CPU / memory pressure','Perform a Root Cause Analysis for high CPU or memory pressure on Oracle. Investigate: (1) top SQL by CPU from v$sql, (2) hard parse rate and library cache hit ratio, (3) PGA over-allocation, (4) parallel query slaves. Provide: Root Cause, Top Consumers, Tuning Recommendations.'),
+          ('🔄','Redo log / archiver stuck','Perform a Root Cause Analysis for Oracle redo log or archiver issues. Investigate: (1) archive destination space and status, (2) log switch frequency, (3) LGWR waits, (4) standby redo apply lag if Data Guard is in use. Provide: Root Cause, Current Status, Immediate Fix, Configuration Improvements.'),
+        ] %}
+        {% for icon, label, prompt in oracle_rca %}
+        <button class="panel-btn rca-btn" onclick='sendSuggestion({{ prompt|tojson }})'>{{ icon }} {{ label }}</button>
+        {% endfor %}
+      </div>
+
+      <!-- Quick suggestions — PostgreSQL -->
+      <div id="suggestions_postgresql">
+        <p class="panel-header">✨ Try asking</p>
+        {% set pg_sugg = [
+          ('⚡','Any performance issues right now?','Are there any performance issues with my PostgreSQL database right now?'),
+          ('🔍','Most expensive queries','What are the most expensive queries in my database?'),
+          ('🔒','Active sessions & blocking locks','Show me active sessions and blocking locks'),
+          ('📊','Tables consuming most disk space','What tables are consuming the most disk space?'),
+          ('🐢','Long running transactions right now','Show me long running transactions right now'),
+          ('💡','Query optimisation opportunities','How can I optimise my database queries?'),
+          ('📈','Current cache hit ratio','What is the current cache hit ratio?'),
+          ('🚨','Most common errors','What are the most common errors in my database?'),
+        ] %}
+        {% for icon, label, prompt in pg_sugg %}
+        <button class="panel-btn" onclick='sendSuggestion({{ prompt|tojson }})'>{{ icon }} {{ label }}</button>
+        {% endfor %}
+
+        <hr class="panel-divider">
+        <p class="panel-header">🔬 Root Cause Analysis</p>
+        {% set pg_rca = [
+          ('🔴','DB crash / FATAL error','Perform a full Root Cause Analysis for a PostgreSQL crash or FATAL error. Check: (1) pg_log for FATAL/PANIC messages, (2) OOM killer activity, (3) checkpoint failures, (4) pg_wal space. Provide: Root Cause, Evidence to Confirm, Immediate Fix, Preventive Measures.'),
+          ('🐢','Sudden performance degradation','Perform a Root Cause Analysis for sudden PostgreSQL performance degradation. Investigate: (1) top queries by mean exec time in pg_stat_statements, (2) autovacuum blocking or table bloat, (3) index scans vs seq scans ratio, (4) cache hit ratio drop. Provide: Root Cause, Evidence Queries, Immediate Actions, Long-term Fix.'),
+          ('🔒','Deadlock / locking storm','Perform a Root Cause Analysis for a PostgreSQL deadlock or locking storm. Investigate: (1) sessions waiting on locks in pg_stat_activity, (2) pg_locks for blocking chains, (3) recent deadlock log entries, (4) long-running idle-in-transaction sessions. Provide: Root Cause, Blocking Chain, Immediate Actions, Application Fix.'),
+          ('🧹','Autovacuum / table bloat','Perform a Root Cause Analysis for autovacuum failure or table bloat. Investigate: (1) tables with high dead tuple counts in pg_stat_user_tables, (2) autovacuum worker status and last run times, (3) long-running transactions blocking vacuum, (4) autovacuum configuration. Provide: Root Cause, Bloated Tables List, Immediate VACUUM steps, Config Tuning.'),
+          ('💾','Disk full / relation size','Perform a Root Cause Analysis for disk full or unexpected table growth. Investigate: (1) largest tables and indexes by size, (2) pg_wal directory size, (3) temp file usage, (4) unlogged tables and toast. Provide: Root Cause, Top Space Consumers, Immediate Actions, Long-term Capacity Plan.'),
+          ('🔌','Connection errors / max_connections','Perform a Root Cause Analysis for PostgreSQL connection errors or max_connections exhaustion. Investigate: (1) current connection count vs max_connections, (2) idle and idle-in-transaction sessions, (3) connection pooler status, (4) pg_hba.conf and authentication errors. Provide: Root Cause, Connection Analysis, Immediate Fix, Pooler Recommendations.'),
+        ] %}
+        {% for icon, label, prompt in pg_rca %}
+        <button class="panel-btn rca-btn" onclick='sendSuggestion({{ prompt|tojson }})'>{{ icon }} {{ label }}</button>
+        {% endfor %}
+      </div>
+
+      <!-- Custom RCA -->
+      <hr class="panel-divider">
+      <p class="panel-header">🚨 Paste Error for RCA</p>
+      <textarea class="rca-textarea" id="rcaText"
+                placeholder="Paste ORA-XXXXX, stack trace, or describe what happened…"></textarea>
+      <button class="rca-run-btn" onclick="runCustomRca()">🔬 Run Deep RCA</button>
+
+    </div>
+
+    <!-- RIGHT PANEL -->
+    <div class="ai-right">
+
+      <!-- Connection banner -->
+      <div class="conn-banner" id="connBanner" style="display:none">
+        <div class="conn-dot"></div>
+        <span id="connBannerText"></span>
+      </div>
+
+      <!-- Chat messages -->
+      <div class="chat-area" id="chatMessages"></div>
+
+      <!-- Conversation toolbar -->
+      <div class="conv-bar" id="chatToolbar">
+        <span class="conv-title" id="convTitle">Unsaved</span>
+        <button class="conv-btn green" onclick="Convs.saveNow()">&#128190; Save</button>
+        <button class="conv-btn"       onclick="Convs.saveAs()">&#128190; Save As…</button>
+        <button class="conv-btn"       onclick="Convs.openPanel()" data-conv-open>&#128194; Open</button>
+        <button class="conv-btn"       onclick="Convs.newSession()">+ New</button>
+        <div style="flex:1"></div>
+        <span id="chatMeta" style="font-size:11px;color:#94A3B8"></span>
+        <button onclick="clearChat()"
+                style="background:none;border:none;color:#9CA3AF;cursor:pointer;font-size:11px;padding:2px 6px">
+          🗑️ Clear
+        </button>
+      </div>
+
+      <!-- Input -->
+      <div class="chat-input-bar">
+        <div class="input-wrap">
+          <input type="text" id="chatInput" placeholder="Ex: Show me active connections and their states"
+                 onkeydown="if(event.key==='Enter' && !event.shiftKey){sendMessage();event.preventDefault()}">
+          <button class="send-btn" id="sendBtn" onclick="sendMessage()">
+            <svg viewBox="0 0 24 24"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+let currentDb = '{{ current_db|default("postgresql") }}';
+let msgCount  = 0;
+let streaming = false;
+
+// ── DB selector ───────────────────────────────────────────────────────────────
+function selectDb(key) {
+  const lk = key.toLowerCase();
+  document.querySelectorAll('.db-card').forEach(c => {
+    c.classList.remove('active');
+    c.querySelector('.db-selected-dot')?.remove();
+  });
+  const card = document.getElementById('card_' + key);
+  if (!card || card.classList.contains('disabled')) return;
+  card.classList.add('active');
+  const dot = document.createElement('div');
+  dot.className = 'db-selected-dot';
+  card.prepend(dot);
+  currentDb = lk;
+  // Show correct suggestions panel
+  document.getElementById('suggestions_oracle').style.display = lk === 'oracle' ? '' : 'none';
+  document.getElementById('suggestions_postgresql').style.display = lk === 'postgresql' ? '' : 'none';
+  // Update placeholder
+  document.getElementById('chatInput').placeholder =
+    lk === 'oracle'
+      ? 'Ex: Show me long running queries for the last hour'
+      : 'Ex: Show me active connections and their states';
+  updateConnBanner();
+}
+
+// Init
+selectDb(currentDb);
+
+function updateConnBanner() {
+  const cards = {{ db_cards_json|safe }};
+  const c = cards.find(x => x.key.toLowerCase() === currentDb);
+  const banner = document.getElementById('connBanner');
+  const txt    = document.getElementById('connBannerText');
+  if (c && c.available) {
+    txt.textContent = c.key + ' · ' + c.label + ' — ' + c.host;
+    banner.style.display = 'flex';
+  } else {
+    banner.style.display = 'none';
+  }
+}
+updateConnBanner();
+
+// ── Suggestions ───────────────────────────────────────────────────────────────
+function sendSuggestion(prompt) {
+  document.getElementById('chatInput').value = prompt;
+  sendMessage();
+}
+
+function runCustomRca() {
+  const txt = document.getElementById('rcaText').value.trim();
+  if (!txt) return;
+  const db = currentDb.charAt(0).toUpperCase() + currentDb.slice(1);
+  const prompt =
+    `Perform a thorough Root Cause Analysis for this ${db} database issue:\n\n${txt}\n\n` +
+    `Structure your response as:\n` +
+    `## 🔍 Likely Root Cause\n## 📋 Evidence to Confirm (include SQL queries to run)\n` +
+    `## 🚑 Immediate Actions (step-by-step fix right now)\n` +
+    `## 🛡️ Preventive Measures (stop this happening again)\n` +
+    `## 🔧 SQL Diagnostics (queries to gather more information)`;
+  document.getElementById('chatInput').value = prompt;
+  sendMessage();
+  document.getElementById('rcaText').value = '';
+}
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+                  .replace(/"/g,'&quot;');
+}
+
+function renderMarkdown(text) {
+  // Headers
+  text = text.replace(/^### (.+)$/gm, '<strong style="font-size:13px;color:#111827;display:block;margin:8px 0 4px">$1</strong>');
+  text = text.replace(/^## (.+)$/gm,  '<strong style="font-size:14px;color:#111827;display:block;margin:10px 0 4px">$1</strong>');
+  text = text.replace(/^# (.+)$/gm,   '<strong style="font-size:15px;color:#111827;display:block;margin:12px 0 4px">$1</strong>');
+  // Bold / italic
+  text = text.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>');
+  text = text.replace(/\*(.+?)\*/g,     '<em>$1</em>');
+  // Inline code
+  text = text.replace(/`([^`]+)`/g, '<code style="background:#F1F5F9;padding:1px 4px;border-radius:3px;font-family:monospace;font-size:11px">$1</code>');
+  // SQL blocks
+  text = text.replace(/```sql\s*([\s\S]*?)```/gi, (_, sql) =>
+    `<div class="sql-label">SQL</div><div class="sql-block">${esc(sql.trim())}</div>`);
+  text = text.replace(/```([\s\S]*?)```/g, (_, code) =>
+    `<div class="sql-block">${esc(code.trim())}</div>`);
+  // Bullet points
+  text = text.replace(/^[\-\*] (.+)$/gm, '<div style="display:flex;gap:6px;margin:2px 0"><span style="color:#6B7280;flex-shrink:0">•</span><span>$1</span></div>');
+  // Numbered list
+  text = text.replace(/^\d+\. (.+)$/gm, '<div style="display:flex;gap:6px;margin:2px 0"><span style="color:#6B7280;flex-shrink:0;min-width:18px">$&</span></div>');
+  // Line breaks
+  text = text.replace(/\n\n/g, '<br><br>').replace(/\n/g, '<br>');
+  return text;
+}
+
+function buildResultTable(r) {
+  const wrap = document.createElement('div');
+  const rowCount = (r.rows || []).length;
+  const elapsed  = r.elapsed_ms || 0;
+  const dbLabel  = currentDb === 'oracle' ? 'Oracle' : 'PostgreSQL';
+  let html = `<div class="sql-label">📊 Query Results — ${dbLabel} (${rowCount} row${rowCount!==1?'s':''} · ${elapsed}ms)</div>`;
+  html += '<div class="result-wrap"><table class="result-table"><thead><tr>';
+  (r.columns || []).forEach(c => { html += `<th>${esc(c)}</th>`; });
+  html += '</tr></thead><tbody>';
+  (r.rows || []).forEach(row => {
+    html += '<tr>';
+    row.forEach(v => { html += `<td>${esc(v ?? 'NULL')}</td>`; });
+    html += '</tr>';
+  });
+  html += '</tbody></table></div>';
+  if (r.row_count > (r.rows||[]).length) {
+    html += `<div class="result-meta">… showing first ${(r.rows||[]).length} of ${r.row_count} rows</div>`;
+  }
+  wrap.innerHTML = html;
+  return wrap;
+}
+
+// ── Send message ──────────────────────────────────────────────────────────────
+function sendMessage() {
+  if (streaming) return;
+  const input = document.getElementById('chatInput');
+  const msg   = input.value.trim();
+  if (!msg) return;
+  input.value = '';
+
+  const displayMsg = (msg.length > 120 && msg.includes('\n'))
+    ? msg.split('\n')[0].trim() + ' …'
+    : msg;
+
+  const chatEl = document.getElementById('chatMessages');
+
+  const userMsg = document.createElement('div');
+  userMsg.className = 'msg user';
+  userMsg.innerHTML =
+    `<div class="avatar user">👤</div><div class="bubble user">${esc(displayMsg)}</div>`;
+  chatEl.appendChild(userMsg);
+  chatEl.scrollTop = 99999;
+
+  const aiMsg    = document.createElement('div');
+  aiMsg.className = 'msg';
+  const bubble   = document.createElement('div');
+  bubble.className = 'bubble ai';
+  const statusEl = document.createElement('div');
+  statusEl.className = 'status-line';
+  const stepsEl  = document.createElement('div');
+  const answerEl = document.createElement('div');
+  answerEl.style.cssText = 'font-size:13px;line-height:1.6;color:#1E293B';
+  bubble.append(statusEl, stepsEl, answerEl);
+  aiMsg.innerHTML = '<div class="avatar ai">🤖</div>';
+  aiMsg.appendChild(bubble);
+  chatEl.appendChild(aiMsg);
+
+  let answerText = '';
+  streaming = true;
+
+  // Safety valve — unlock after 3 min if stream dies silently
+  const _safetyTimer = setTimeout(() => { if (streaming) finalize(); }, 180000);
+
+  document.getElementById('sendBtn').disabled = true;
+  document.getElementById('chatInput').disabled = true;
+
+  function _done() {
+    clearTimeout(_safetyTimer);
+    finalize();
+  }
+  function _err(msg2) {
+    statusEl.textContent = '';
+    bubble.innerHTML = `<span style="color:#EF4444">⚠️ ${esc(msg2)}</span>`;
+    _done();
+  }
+
+  fetch('/api/ai/chat/stream', {
+    method: 'POST',
+    credentials: 'include',
+    headers: {'Content-Type':'application/json'},
+    body: JSON.stringify({ message: msg, db_type: currentDb }),
+  })
+  .then(res => {
+    if (!res.ok) {
+      return res.json().catch(() => ({}))
+        .then(e => _err(e.error || 'Server error ' + res.status));
+    }
+    const reader = res.body.getReader();
+    const dec    = new TextDecoder();
+    let   buf    = '';
+
+    function read() {
+      reader.read()
+        .then(({ done, value }) => {
+          if (done) { _done(); return; }
+          buf += dec.decode(value, { stream: true });
+          const lines = buf.split('\n');
+          buf = lines.pop();   // keep incomplete trailing line
+          for (const line of lines) {
+            if (!line.startsWith('data: ')) continue;
+            let p;
+            try { p = JSON.parse(line.slice(6)); } catch(_) { continue; }
+
+            if (p.status) {
+              statusEl.innerHTML =
+                `<span class="spinner" style="display:inline-block;width:10px;height:10px;border-width:2px;vertical-align:middle;margin-right:6px"></span>${esc(p.status)}`;
+
+            } else if (p.step) {
+              statusEl.textContent = '';
+              const s = p.step;
+              const d = document.createElement('div');
+              if (s.type === 'tool_call') {
+                d.className = 'step-event tool';
+                d.innerHTML = `🔍 <strong>${esc(s.tool)}</strong><pre>${esc(s.input)}</pre>`;
+              } else {
+                d.className = 'step-event obs';
+                const prev = s.content.length > 300 ? s.content.slice(0,300)+'…' : s.content;
+                d.innerHTML = `📊 <pre>${esc(prev)}</pre>`;
+              }
+              stepsEl.appendChild(d);
+
+            } else if (p.token) {
+              statusEl.textContent = '';
+              answerText += p.token;
+              answerEl.textContent = answerText;
+
+            } else if (p.done) {
+              statusEl.textContent = '';
+              if (answerText) answerEl.innerHTML = renderMarkdown(answerText);
+              msgCount++;
+              document.getElementById('chatMeta').textContent =
+                `💬 ${msgCount} exchange(s) · ${currentDb}`;
+              document.getElementById('chatToolbar').style.display = 'flex';
+              _done(); return;
+
+            } else if (p.error) {
+              _err(p.error); return;
+            }
+            chatEl.scrollTop = 99999;
+          }
+          read();
+        })
+        .catch(err => _err(err.message || 'Stream read error'));  // ← THIS was missing
+    }
+    read();
+  })
+  .catch(err => _err(err.message || 'Network error'));
+}
+
+function finalize() {
+  streaming = false;
+  document.getElementById('sendBtn').disabled = false;
+  document.getElementById('chatInput').disabled = false;
+  document.getElementById('chatInput').focus();
+}
+
+function clearChat() {
+  fetch('/api/ai/chat/clear', {
+    method: 'POST',
+    credentials: 'include',
+    headers: {'Content-Type':'application/json'},
+  });
+  document.getElementById('chatMessages').innerHTML = '';
+  msgCount = 0;
+  document.getElementById('chatMeta').textContent = '';
+}
+
+// ── Conversations ──────────────────────────────────────────────────
+Convs.init({
+  module:      'ai_assistant',
+  titleElId:   'convTitle',
+  getDataFn:   () => {
+    const msgs = Array.from(document.querySelectorAll('.msg')).map(el => ({
+      role:    el.classList.contains('user') ? 'user' : 'assistant',
+      content: el.querySelector('.bubble')?.innerText || '',
+    }));
+    return { messages: msgs, db_type: currentDb };
+  },
+  loadDataFn: (data) => {
+    clearChat();
+    (data.messages||[]).forEach(m => {
+      const el = document.createElement('div');
+      el.className = 'msg' + (m.role==='user' ? ' user' : '');
+      const av = document.createElement('div');
+      av.className = 'avatar ' + (m.role==='user' ? 'user' : 'ai');
+      av.textContent = m.role==='user' ? '👤' : '🤖';
+      const bub = document.createElement('div');
+      bub.className = 'bubble ' + (m.role==='user' ? 'user' : 'ai');
+      bub.textContent = m.content || '';
+      el.append(av, bub);
+      document.getElementById('chatMessages').appendChild(el);
+    });
+    const n = (data.messages||[]).filter(m=>m.role==='user').length;
+    if(n){ msgCount=n; document.getElementById('chatToolbar').style.display='flex'; }
+    document.getElementById('chatMeta').textContent = n ? `💬 ${n} exchange(s) · ${data.db_type||''}` : '';
+  },
+  onNew: () => { clearChat(); },
+});
+
+// Refresh LLM bar from API (catches any config change since page load)
+async function loadLlmBar() {
+  try {
+    const r = await fetch('/api/llm/config', { credentials: 'include' });
+    if (!r.ok) return;  // keep template-rendered value
+    const d = await r.json();
+    const cfg = d.config || {};
+    const lbl = document.getElementById('llmBarLabel');
+    if (cfg.provider && cfg.model) {
+      lbl.textContent = cfg.provider.toUpperCase() + ' · ' + cfg.model;
+    } else if (!lbl.textContent || lbl.textContent.includes('Loading')) {
+      lbl.innerHTML = '⚠️ LLM not configured — <a href="/llm-settings" style="color:#EF4444">configure now</a>';
+    }
+  } catch(e) { /* keep template-rendered value on error */ }
+}
+loadLlmBar();
+
+// Focus input on load
+document.getElementById('chatInput').focus();
+</script>
+{% endblock %}

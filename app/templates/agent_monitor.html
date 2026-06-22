@@ -1,0 +1,589 @@
+{% extends "base.html" %}
+{% block title %}Agent Monitor — dbadeeds.ai{% endblock %}
+{% block page_title %}📡 Agent Monitor{% endblock %}
+{% set active_page = 'agent_monitor' %}
+
+{% block head %}
+<style>
+  .amtabs{display:flex;gap:0;border-bottom:2px solid var(--border);margin-bottom:20px}
+  .amtab{padding:10px 22px;font-size:13px;font-weight:600;cursor:pointer;border-bottom:3px solid transparent;
+    margin-bottom:-2px;color:var(--muted);background:none;border-top:none;border-left:none;border-right:none;transition:all .15s}
+  .amtab:hover{color:var(--accent)}.amtab.active{color:var(--accent);border-bottom-color:var(--accent)}
+  .ampanel{display:none}.ampanel.active{display:block}
+
+  /* ── Summary cards ── */
+  .am-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px}
+  .am-card{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+  .am-card .val{font-size:26px;font-weight:700;color:var(--navy);font-family:var(--mono)}
+  .am-card .lbl{font-size:11px;color:var(--muted);margin-top:2px}
+
+  /* ── Schedule rows ── */
+  .sched-table{width:100%;border-collapse:collapse}
+  .sched-table th{text-align:left;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;
+    color:var(--muted);padding:8px 12px;border-bottom:2px solid var(--border)}
+  .sched-table td{padding:10px 12px;border-bottom:1px solid var(--border);font-size:13px;vertical-align:middle}
+  .sched-table tr:hover td{background:var(--surface)}
+  .st-badge{display:inline-block;font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px}
+  .st-enabled{background:#dcfce7;color:#166534}.st-disabled{background:#f1f5f9;color:#64748b}
+  .st-running{background:#dbeafe;color:#1d4ed8}.st-ok{background:#dcfce7;color:#166534}
+  .st-failed{background:#fee2e2;color:#991b1b}.st-warn{background:#fef3c7;color:#92400e}
+  .db-tag{font-size:10px;font-weight:700;padding:2px 7px;border-radius:6px}
+  .db-pg{background:#dbeafe;color:#1e40af}.db-ora{background:#fef3c7;color:#92400e}
+  .freq-badge{font-size:10px;padding:2px 7px;border-radius:6px;background:var(--border);color:var(--text)}
+  .notify-dot{display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:5px}
+  .dot-on{background:#22c55e}.dot-off{background:#cbd5e1}
+
+  /* ── Create schedule modal ── */
+  .modal-backdrop{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);z-index:100}
+  .modal-backdrop.open{display:flex;align-items:center;justify-content:center}
+  .modal-box{background:var(--bg);border-radius:12px;padding:28px;width:600px;max-height:85vh;overflow-y:auto;
+    box-shadow:0 20px 60px rgba(0,0,0,.3);position:relative}
+  .modal-box h3{font-size:16px;font-weight:700;color:var(--navy);margin:0 0 20px}
+  .fld{margin-bottom:12px}
+  .fld label{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.05em;
+    color:var(--muted);display:block;margin-bottom:4px}
+  .fld input,.fld select,.fld textarea{width:100%;padding:8px 10px;border:1px solid var(--border);
+    border-radius:6px;font-size:13px;background:var(--bg);color:var(--text);outline:none}
+  .fld input:focus,.fld select:focus,.fld textarea:focus{border-color:var(--accent)}
+  .frow{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+  .frow3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+
+  /* ── Run history ── */
+  .run-row{display:grid;grid-template-columns:180px 140px 80px 60px 1fr 100px;gap:8px;
+    padding:8px 12px;border-bottom:1px solid var(--border);font-size:12px;align-items:start}
+  .run-head{font-weight:700;font-size:10px;text-transform:uppercase;color:var(--muted);background:var(--surface)}
+  .run-output{font-size:11px;color:var(--muted);cursor:pointer;line-height:1.4;max-height:40px;overflow:hidden;
+    transition:max-height .2s}.run-output.expanded{max-height:400px;overflow:auto}
+  .run-output pre{font-family:var(--mono);font-size:11px;white-space:pre-wrap;padding:8px;
+    background:#0f172a;color:#94a3b8;border-radius:6px;margin-top:6px}
+
+  /* ── Live run panel ── */
+  .live-output{background:#0f172a;border-radius:8px;padding:14px;min-height:200px;max-height:480px;
+    overflow-y:auto;font-family:var(--mono);font-size:12px;color:#94a3b8;line-height:1.7;
+    white-space:pre-wrap;word-break:break-word}
+  .token-stream span{animation:fadeIn .1s ease}
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}}
+
+  .sw{position:relative;display:inline-block;width:38px;height:20px}
+  .sw input{opacity:0;width:0;height:0}
+  .sw-sl{position:absolute;cursor:pointer;inset:0;background:#cbd5e1;border-radius:10px;transition:.2s}
+  .sw-sl:before{content:"";position:absolute;width:14px;height:14px;left:3px;bottom:3px;background:#fff;border-radius:50%;transition:.2s}
+  input:checked+.sw-sl{background:var(--accent)}
+  input:checked+.sw-sl:before{transform:translateX(18px)}
+
+  .toast{position:fixed;bottom:20px;right:20px;z-index:9999;padding:10px 18px;border-radius:8px;
+    font-size:13px;font-weight:500;color:#fff;display:none}
+  .toast.show{display:block}.toast.ok{background:#16a34a}.toast.err{background:#dc2626}
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Summary row -->
+<div class="am-summary">
+  <div class="am-card"><div class="val" id="statTotal">—</div><div class="lbl">📅 Schedules</div></div>
+  <div class="am-card"><div class="val" id="statEnabled">—</div><div class="lbl">✅ Enabled</div></div>
+  <div class="am-card"><div class="val" id="statRuns">—</div><div class="lbl">▶️ Runs today</div></div>
+  <div class="am-card"><div class="val" id="statFailed">—</div><div class="lbl">❌ Failed (24h)</div></div>
+</div>
+
+<!-- Tabs -->
+<div class="amtabs">
+  <button class="amtab active" onclick="switchTab('schedules',this)">📅 Schedules</button>
+  <button class="amtab"        onclick="switchTab('history',this)">📋 Run History</button>
+  <button class="amtab"        onclick="switchTab('live',this)">⚡ Run Now</button>
+</div>
+
+<!-- ═══ Tab 1 — Schedules ═══════════════════════════════════════════════ -->
+<div class="ampanel active" id="ampanel-schedules">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <div>
+      <div style="font-size:13px;color:var(--muted)">Define when agents run, which databases they check, and where to send alerts.</div>
+    </div>
+    <button class="btn btn-primary" onclick="openCreateModal()">＋ New Schedule</button>
+  </div>
+  <div id="scheduleList"><p style="color:var(--muted);font-size:13px">Loading…</p></div>
+</div>
+
+<!-- ═══ Tab 2 — Run History ══════════════════════════════════════════════ -->
+<div class="ampanel" id="ampanel-history">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <select id="histFilter" onchange="loadHistory()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--bg);color:var(--text)">
+        <option value="">All schedules</option>
+      </select>
+      <select id="histStatus" onchange="loadHistory()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--bg);color:var(--text)">
+        <option value="">All statuses</option>
+        <option value="success">Success</option>
+        <option value="failed">Failed</option>
+      </select>
+    </div>
+    <button class="btn btn-secondary btn-sm" onclick="loadHistory()">↺ Refresh</button>
+  </div>
+  <div class="run-row run-head">
+    <span>Started</span><span>Schedule</span><span>DB</span><span>Status</span><span>Output</span><span>Notified</span>
+  </div>
+  <div id="historyList"><p style="color:var(--muted);font-size:13px;padding:12px">Loading…</p></div>
+</div>
+
+<!-- ═══ Tab 3 — Run Now ══════════════════════════════════════════════════ -->
+<div class="ampanel" id="ampanel-live">
+  <div style="display:grid;grid-template-columns:320px 1fr;gap:20px">
+    <div>
+      <div class="fld">
+        <label>Select schedule to run</label>
+        <select id="liveSchedule" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--bg);color:var(--text)">
+          <option value="">— choose a schedule —</option>
+        </select>
+      </div>
+      <div id="liveScheduleInfo" style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;font-size:12px;color:var(--muted);margin-bottom:12px;display:none"></div>
+      <button class="btn btn-primary" style="width:100%" onclick="runNow()">▶️ Run Now</button>
+      <div style="margin-top:10px;font-size:11px;color:var(--muted)">
+        This triggers the agent immediately without waiting for the next scheduled time. Results appear in the output panel and are saved to run history.
+      </div>
+    </div>
+    <div>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <div style="font-size:13px;font-weight:600;color:var(--navy)">Live output</div>
+        <button class="btn btn-secondary btn-sm" onclick="clearLive()">🗑 Clear</button>
+      </div>
+      <div class="live-output token-stream" id="liveOutput">Select a schedule and click Run Now to see live output here…</div>
+      <div id="liveStatus" style="margin-top:8px;font-size:12px;color:var(--muted)"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══ Create Schedule Modal ════════════════════════════════════════════ -->
+<div class="modal-backdrop" id="createModal">
+  <div class="modal-box">
+    <button onclick="closeCreateModal()" style="position:absolute;top:16px;right:18px;background:none;border:none;font-size:18px;cursor:pointer;color:var(--muted)">✕</button>
+    <h3>📅 New Agent Schedule</h3>
+
+    <!-- Row 1: Name + DB Type -->
+    <div class="frow">
+      <div class="fld"><label>Schedule Name *</label><input id="sName" placeholder="e.g. Daily PG Health Check"></div>
+      <div class="fld"><label>Database Type *</label>
+        <select id="sDb" onchange="filterConnectionsAndTemplates()">
+          <option value="postgres">🐘 PostgreSQL</option>
+          <option value="oracle">🔶 Oracle</option>
+        </select>
+      </div>
+    </div>
+
+    <!-- Row 2: Database Connection dropdown -->
+    <div class="fld">
+      <label>Database Connection *
+        <span style="font-size:10px;color:var(--muted);font-weight:400;margin-left:6px">which database this agent will run against</span>
+      </label>
+      <select id="sConnId" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--bg);color:var(--text)">
+        <option value="">⟳ Loading connections…</option>
+      </select>
+      <div id="sConnHint" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
+    </div>
+
+    <!-- Row 3: Agent Template dropdown -->
+    <div class="fld">
+      <label>Agent Template *
+        <span style="font-size:10px;color:var(--muted);font-weight:400;margin-left:6px">picks the system prompt and agent behaviour</span>
+      </label>
+      <select id="sTemplate" onchange="onTemplateChange()" style="width:100%;padding:8px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--bg);color:var(--text)">
+        <option value="">⟳ Loading templates…</option>
+      </select>
+      <div id="sTemplateDesc" style="font-size:11px;color:#2563eb;margin-top:4px;min-height:16px"></div>
+    </div>
+
+    <!-- Row 4: Frequency + Time -->
+    <div class="frow">
+      <div class="fld"><label>Frequency *</label>
+        <select id="sFreq" onchange="toggleFreqFields()">
+          <option value="hourly">Every Hour</option>
+          <option value="daily" selected>Daily</option>
+          <option value="weekly">Weekly</option>
+        </select>
+      </div>
+      <div class="fld" id="timeField">
+        <label>Run at (UTC)</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="sHour" type="number" min="0" max="23" value="8" style="width:70px;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--bg);color:var(--text)">
+          <span style="color:var(--muted)">:</span>
+          <input id="sMin" type="number" min="0" max="59" value="0" style="width:70px;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--bg);color:var(--text)">
+          <div class="fld" id="dowField" style="margin:0;flex:1">
+            <select id="sDow" style="width:100%;padding:8px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--bg);color:var(--text)">
+              <option value="mon">Monday</option><option value="tue">Tuesday</option>
+              <option value="wed">Wednesday</option><option value="thu">Thursday</option>
+              <option value="fri">Friday</option><option value="sat">Saturday</option>
+              <option value="sun">Sunday</option>
+            </select>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Row 5: Task -->
+    <div class="fld">
+      <label>Task / custom question for the Agent
+        <span style="font-size:10px;color:var(--muted);font-weight:400;margin-left:4px">leave blank to use the template default</span>
+      </label>
+      <textarea id="sTask" rows="3" placeholder="e.g. Run a full health check: sessions, replication lag, blocking locks, slow queries, cache hit ratio. Flag anything that needs attention."></textarea>
+    </div>
+
+    <!-- Row 6: Notifications -->
+    <div class="frow">
+      <div class="fld"><label>Alert Email Recipients (comma-separated)</label><input id="sEmailTo" placeholder="dba@company.com, oncall@company.com"></div>
+      <div class="fld"><label>Email Subject</label><input id="sSubject" placeholder="auto-filled from template name"></div>
+    </div>
+    <div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:6px;padding:10px;font-size:12px;color:#1E40AF;margin-bottom:16px">
+      💡 Alerts also go to all enabled channels in <a href="/notifications" style="color:var(--accent)">Notification Settings</a> (Teams, Slack, Email) whenever the agent detects a problem.
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end">
+      <button class="btn btn-secondary" onclick="closeCreateModal()">Cancel</button>
+      <button class="btn btn-primary" onclick="createSchedule()">✅ Create Schedule</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = '/api/agents';
+let schedules    = [];
+let allRuns      = [];
+let allConns     = [];    // [{id, name, db_type, is_active}]
+let allTemplates = [];    // from /api/agents/templates
+
+/* ── utils ── */
+function esc(s){const d=document.createElement('div');d.textContent=s||'';return d.innerHTML}
+function toast(msg,ok=true){const t=document.getElementById('toast');t.textContent=msg;t.className='toast show '+(ok?'ok':'err');setTimeout(()=>t.className='toast',3500)}
+function fmtTs(iso){if(!iso)return'—';return iso.replace('T',' ').replace('+00:00','').slice(0,16)+' UTC'}
+function fmtDur(s,f){if(!s||!f)return'—';const ms=new Date(f)-new Date(s);return ms<60000?(ms/1000).toFixed(1)+'s':(ms/60000).toFixed(1)+'m'}
+
+function switchTab(name,btn){
+  document.querySelectorAll('.amtab').forEach(b=>b.classList.remove('active'));
+  document.querySelectorAll('.ampanel').forEach(p=>p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('ampanel-'+name).classList.add('active');
+  if(name==='history') loadHistory();
+}
+
+/* ── load ── */
+async function apiFetch(url,method='GET',body=null){
+  const opts={method,credentials:'include',headers:{'Content-Type':'application/json'}};
+  if(body) opts.body=JSON.stringify(body);
+  const r=await fetch(url,opts);
+  return r.json();
+}
+
+async function loadAll(){
+  const [sd, cd, td] = await Promise.all([
+    apiFetch(API+'/schedules'),
+    apiFetch('/api/connections/'),
+    apiFetch(API+'/templates'),
+  ]);
+  schedules    = sd.schedules || [];
+  allConns     = (cd.connections || []).map(c => ({
+    id:        c.id,
+    name:      c.name,
+    db_type:   c.db_type,
+    is_active: c.is_active,
+  }));
+  allTemplates = td.templates || [];
+  updateStats();
+  renderSchedules();
+  populateScheduleDropdowns();
+}
+
+function updateStats(){
+  const today = new Date().toISOString().slice(0,10);
+  document.getElementById('statTotal').textContent   = schedules.length;
+  document.getElementById('statEnabled').textContent = schedules.filter(s=>s.enabled).length;
+  const todayRuns = schedules.reduce((n,s)=>{
+    const lr = s.last_run_record;
+    return n + (lr && lr.started_at?.startsWith(today) ? 1 : 0);
+  },0);
+  const failedRuns = schedules.reduce((n,s)=>{
+    const lr = s.last_run_record;
+    return n + (lr && lr.started_at?.startsWith(today) && lr.status==='failed' ? 1 : 0);
+  },0);
+  document.getElementById('statRuns').textContent   = todayRuns;
+  document.getElementById('statFailed').textContent = failedRuns;
+}
+
+function renderSchedules(){
+  const el = document.getElementById('scheduleList');
+  if(!schedules.length){
+    el.innerHTML = '<div style="padding:32px;text-align:center;color:var(--muted);font-size:13px">No schedules yet. Click <strong>+ New Schedule</strong> to create one.</div>';
+    return;
+  }
+  const freqLabel = {hourly:'⏱ Hourly',daily:'📅 Daily',weekly:'📆 Weekly'};
+  el.innerHTML = `<table class="sched-table">
+    <thead><tr>
+      <th>Schedule</th><th>Agent</th><th>DB</th><th>Frequency</th>
+      <th>Last run</th><th>Status</th><th>Notify</th><th>Actions</th>
+    </tr></thead>
+    <tbody>
+    ${schedules.map(s=>{
+      const lr   = s.last_run_record;
+      const stat = lr?.status;
+      const statBadge = !lr ? '<span class="st-badge" style="background:#f1f5f9;color:#64748b">Never run</span>'
+        : stat==='success' ? '<span class="st-badge st-ok">✓ OK</span>'
+        : stat==='failed'  ? '<span class="st-badge st-failed">✗ Failed</span>'
+        : stat==='running' ? '<span class="st-badge st-running">⟳ Running</span>'
+        : '<span class="st-badge">'+stat+'</span>';
+      const enabledBadge = s.enabled
+        ? '<span class="st-badge st-enabled">● Active</span>'
+        : '<span class="st-badge st-disabled">○ Paused</span>';
+      const dbTag = s.db_type==='oracle'
+        ? '<span class="db-tag db-ora">ORACLE</span>'
+        : '<span class="db-tag db-pg">POSTGRES</span>';
+      const notifyDot = s.email_to
+        ? `<span class="notify-dot dot-on"></span>${s.email_to.split(',')[0].trim()}`
+        : '<span class="notify-dot dot-off"></span>Channels only';
+      const freq = freqLabel[s.frequency]||s.frequency;
+      const timeStr = s.frequency==='hourly' ? `at :${String(s.minute||0).padStart(2,'0')}`
+        : s.frequency==='weekly' ? `${(s.day_of_week||'').toUpperCase()} ${String(s.hour||8).padStart(2,'0')}:${String(s.minute||0).padStart(2,'0')}`
+        : `${String(s.hour||8).padStart(2,'0')}:${String(s.minute||0).padStart(2,'0')} UTC`;
+      return `<tr>
+        <td>
+          <div style="font-weight:600;font-size:13px">${esc(s.name)}</div>
+          <div style="font-size:11px;color:var(--muted);margin-top:2px">${enabledBadge}</div>
+        </td>
+        <td style="font-size:12px">
+          <div style="font-weight:500">${esc(s.template_name || s.agent_type.replace(/_/g,' '))}</div>
+          ${s.connection_id ? (() => {
+            const c = allConns.find(x => x.id === s.connection_id);
+            return c ? `<div style="font-size:10px;color:var(--muted);margin-top:2px">🔌 ${esc(c.name)}</div>` : '';
+          })() : ''}
+        </td>
+        <td>${dbTag}</td>
+        <td><span class="freq-badge">${freq}</span><div style="font-size:10px;color:var(--muted);margin-top:2px">${timeStr}</div></td>
+        <td style="font-size:11px;color:var(--muted)">${fmtTs(lr?.started_at||s.last_run)}</td>
+        <td>${statBadge}</td>
+        <td style="font-size:11px;color:var(--muted)">${notifyDot}</td>
+        <td>
+          <div style="display:flex;gap:5px;flex-wrap:wrap">
+            <button class="btn btn-secondary btn-sm" onclick="runScheduleNow('${s.id}')">▶</button>
+            <button class="btn btn-secondary btn-sm" onclick="toggleSched('${s.id}',${s.enabled})">${s.enabled?'⏸':'▶️'}</button>
+            <button class="btn btn-secondary btn-sm" onclick="deleteSched('${s.id}','${esc(s.name)}')" style="color:#dc2626">🗑</button>
+          </div>
+        </td>
+      </tr>
+      ${lr&&lr.output ? `<tr><td colspan="8" style="padding:0 12px 10px">
+        <div style="font-size:11px;color:var(--muted);background:var(--surface);border-radius:6px;padding:8px 12px;
+          max-height:60px;overflow:hidden;cursor:pointer;line-height:1.5" 
+          onclick="this.style.maxHeight=this.style.maxHeight==='none'?'60px':'none'">
+          ${esc((lr.output||'').slice(0,500))}${(lr.output||'').length>500?'… (click to expand)':''}
+        </div>
+      </td></tr>` : ''}`;
+    }).join('')}
+    </tbody></table>`;
+}
+
+async function toggleSched(id, currently){
+  const d = await apiFetch(API+`/schedules/${id}/toggle`,'POST');
+  if(d.ok){toast(currently?'Schedule paused':'Schedule enabled'); loadAll();}
+  else toast(d.error||'Failed',false);
+}
+
+async function deleteSched(id, name){
+  if(!confirm(`Delete schedule "${name}"?`)) return;
+  const d = await apiFetch(API+`/schedules/${id}`,'DELETE');
+  if(d.ok){toast('Schedule deleted'); loadAll();}
+  else toast(d.error||'Failed',false);
+}
+
+async function runScheduleNow(id){
+  const d = await apiFetch(API+`/schedules/${id}/run-now`,'POST');
+  if(d.ok){
+    toast('✅ Run started. Output saved to history.');
+    setTimeout(loadAll, 2000);
+  } else toast(d.error||'Failed to trigger',false);
+}
+
+/* ── create modal ── */
+function openCreateModal(){
+  document.getElementById('createModal').classList.add('open');
+  filterConnectionsAndTemplates();
+}
+function closeCreateModal(){document.getElementById('createModal').classList.remove('open')}
+function toggleFreqFields(){
+  const f = document.getElementById('sFreq').value;
+  document.getElementById('timeField').style.display  = f==='hourly' ? 'none' : 'block';
+  document.getElementById('dowField').style.display   = f==='weekly' ? 'block' : 'none';
+}
+
+function filterConnectionsAndTemplates(){
+  const dbType = document.getElementById('sDb').value;
+  // Connections
+  const connSel = document.getElementById('sConnId');
+  const filtered = allConns.filter(c => c.db_type === dbType);
+  if(!filtered.length){
+    connSel.innerHTML = '<option value="">No '+dbType+' connections found — add one in Database Connections</option>';
+    document.getElementById('sConnHint').textContent = '';
+  } else {
+    connSel.innerHTML = filtered.map(c =>
+      `<option value="${c.id}" ${c.is_active?'selected':''}>${c.db_type==='oracle'?'🔶':'🐘'} ${esc(c.name)}${c.is_active?' (active)':''}</option>`
+    ).join('');
+    const active = filtered.find(c=>c.is_active);
+    document.getElementById('sConnHint').textContent = active
+      ? 'Currently active: '+active.name
+      : 'No active connection — select one above; the scheduler will activate it before each run.';
+  }
+  // Templates
+  const tmplSel = document.getElementById('sTemplate');
+  const tmplFiltered = allTemplates.filter(t =>
+    t.database_type === dbType || t.database_type === (dbType==='postgres'?'postgresql':dbType)
+  );
+  if(!tmplFiltered.length){
+    tmplSel.innerHTML = '<option value="">No templates for '+dbType+'</option>';
+  } else {
+    tmplSel.innerHTML = tmplFiltered.map(t =>
+      `<option value="${esc(t.name)}" data-desc="${esc(t.description)}" data-type="${t.agent_type}">${esc(t.name)}</option>`
+    ).join('');
+    onTemplateChange();
+  }
+}
+
+function onTemplateChange(){
+  const sel  = document.getElementById('sTemplate');
+  const opt  = sel.options[sel.selectedIndex];
+  const desc = opt?.dataset?.desc || '';
+  document.getElementById('sTemplateDesc').textContent = desc;
+  // Auto-fill subject if empty
+  const subj = document.getElementById('sSubject');
+  if(!subj.value) subj.value = 'Agent Report: ' + (opt?.text||'');
+}
+
+async function createSchedule(){
+  const val = id => document.getElementById(id)?.value?.trim()||'';
+  const name = val('sName');
+  const connId = val('sConnId');
+  const tmpl   = val('sTemplate');
+  if(!name)   { toast('Schedule name is required', false); return; }
+  if(!connId) { toast('Select a database connection', false); return; }
+  if(!tmpl)   { toast('Select an agent template', false); return; }
+  const task = val('sTask') || (()=>{
+    const sel = document.getElementById('sTemplate');
+    const opt = sel.options[sel.selectedIndex];
+    return opt?.dataset?.desc || 'Run a full database health check and flag any problems.';
+  })();
+  const payload = {
+    name,
+    task,
+    db_type:       val('sDb'),
+    connection_id: connId,
+    template_name: tmpl,
+    agent_type:    document.getElementById('sTemplate').options[document.getElementById('sTemplate').selectedIndex]?.dataset?.type || 'performance',
+    frequency:     val('sFreq'),
+    hour:          parseInt(val('sHour'))||8,
+    minute:        parseInt(val('sMin'))||0,
+    day_of_week:   val('sDow'),
+    email_to:      val('sEmailTo'),
+    email_subject: val('sSubject')||'Agent Report: '+name,
+  };
+  const d = await apiFetch(API+'/schedules','POST',payload);
+  if(d.ok){ toast('✅ Schedule created'); closeCreateModal(); loadAll(); }
+  else toast(d.error||'Failed',false);
+}
+
+/* ── history ── */
+function populateScheduleDropdowns(){
+  const hist = document.getElementById('histFilter');
+  const live = document.getElementById('liveSchedule');
+  const existing = new Set([...hist.querySelectorAll('option')].map(o=>o.value));
+  schedules.forEach(s=>{
+    if(!existing.has(s.id)){
+      [hist,live].forEach(el=>{
+        const o=document.createElement('option'); o.value=s.id; o.textContent=s.name; el.appendChild(o);
+      });
+    }
+  });
+}
+
+async function loadHistory(){
+  const sid    = document.getElementById('histFilter').value;
+  const status = document.getElementById('histStatus').value;
+  let url = API+'/schedules/history?limit=100';
+  if(sid) url += '&schedule_id='+sid;
+  const d = await apiFetch(url);
+  let runs = d.runs||[];
+  if(status) runs = runs.filter(r=>r.status===status);
+  allRuns = runs;
+  renderHistory(runs);
+}
+
+function renderHistory(runs){
+  const el = document.getElementById('historyList');
+  if(!runs.length){el.innerHTML='<p style="color:var(--muted);font-size:13px;padding:12px">No runs found.</p>';return;}
+  el.innerHTML = runs.map(r=>{
+    const sched = schedules.find(s=>s.id===r.schedule_id);
+    const dbTag = sched?.db_type==='oracle'
+      ? '<span class="db-tag db-ora">ORA</span>'
+      : '<span class="db-tag db-pg">PG</span>';
+    const statBadge = r.status==='success'
+      ? '<span class="st-badge st-ok">✓</span>'
+      : r.status==='failed'
+        ? '<span class="st-badge st-failed">✗</span>'
+        : r.status==='running'
+          ? '<span class="st-badge st-running">⟳</span>'
+          : `<span class="st-badge">${r.status}</span>`;
+    const notifySt = r.email_sent
+      ? '<span style="color:#16a34a;font-size:11px">✉ sent</span>'
+      : r.email_message?.includes('channel')
+        ? '<span style="color:#2563eb;font-size:11px">📡 sent</span>'
+        : '<span style="color:var(--muted);font-size:11px">—</span>';
+    const output = r.output||r.error||'';
+    const dur    = fmtDur(r.started_at, r.finished_at);
+    const problem = /blocking|deadlock|ERROR|ORA-|lag|full|FATAL/i.test(output);
+    return `<div class="run-row" style="${problem?'border-left:3px solid #f59e0b;':''}">
+      <span style="font-size:11px;color:var(--muted)">${fmtTs(r.started_at)}<br><span style="font-size:10px">by ${r.triggered_by||'scheduler'}</span></span>
+      <span style="font-size:12px">${esc(r.schedule_name||'—')}</span>
+      <span>${dbTag}</span>
+      <span>${statBadge}<br><span style="font-size:10px;color:var(--muted)">${dur}</span></span>
+      <div class="run-output" onclick="this.classList.toggle('expanded')">${output
+        ? `<span style="font-size:11px;color:${problem?'#f59e0b':'var(--muted)'}">${problem?'⚠️ ':''}${esc(output.slice(0,200))}${output.length>200?'…':''}</span>
+           ${output.length>200?`<pre>${esc(output)}</pre>`:''}`
+        : '<span style="color:var(--muted)">No output</span>'}
+      </div>
+      <span>${notifySt}</span>
+    </div>`;
+  }).join('');
+}
+
+/* ── live run ── */
+document.getElementById('liveSchedule').addEventListener('change', function(){
+  const s = schedules.find(x=>x.id===this.value);
+  const info = document.getElementById('liveScheduleInfo');
+  if(s){
+    info.style.display='block';
+    info.innerHTML=`<strong>${esc(s.name)}</strong><br>Agent: ${esc(s.agent_type)} · DB: ${s.db_type}<br>
+      Task: <em>${esc((s.task||'').slice(0,120))}${(s.task||'').length>120?'…':''}</em>`;
+  } else info.style.display='none';
+});
+
+async function runNow(){
+  const sid = document.getElementById('liveSchedule').value;
+  if(!sid){toast('Select a schedule first',false);return;}
+  const out   = document.getElementById('liveOutput');
+  const stat  = document.getElementById('liveStatus');
+  out.textContent = '⟳ Starting agent…\n';
+  stat.textContent = '';
+  const d = await apiFetch(API+`/schedules/${sid}/run-now`,'POST');
+  if(!d.ok){out.textContent='Error: '+(d.error||'unknown'); return;}
+  const run = d.run||{};
+  out.textContent = run.output || run.error || 'Run completed (no output)';
+  const problem = /blocking|deadlock|ERROR|ORA-|lag|full|FATAL/i.test(run.output||'');
+  stat.innerHTML = `<span style="color:${run.status==='failed'?'#dc2626':problem?'#f59e0b':'#16a34a'}">${
+    run.status==='failed'?'❌ Failed':problem?'⚠️ Problem detected':'✅ Completed'
+  }</span> · ${fmtTs(run.started_at)} · ${fmtDur(run.started_at,run.finished_at)} · 
+  ${run.email_sent?`✉ Notified ${run.email_message||''}`:'No notification sent'}`;
+  loadAll();
+}
+
+function clearLive(){
+  document.getElementById('liveOutput').textContent='Select a schedule and click Run Now…';
+  document.getElementById('liveStatus').textContent='';
+}
+
+toggleFreqFields();
+loadAll();
+</script>
+{% endblock %}

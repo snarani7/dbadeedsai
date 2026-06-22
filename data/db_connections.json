@@ -1,0 +1,24 @@
+{
+  "oracle_1": {
+    "name": "Oracle Example",
+    "db_type": "oracle",
+    "connection_string": "hr/password@192.168.1.100:1521/orcl",
+    "is_active": false,
+    "status": "untested",
+    "owner": "admin"
+  },
+  "postgres_1": {
+    "name": "PostgreSQL Example",
+    "db_type": "postgres",
+    "connection_string": "postgresql://user:password@localhost:5432/mydb",
+    "is_active": false,
+    "status": "untested",
+    "host": "localhost",
+    "port": "5432",
+    "db_user": "user",
+    "service_or_db": "mydb",
+    "owner": "admin"
+  }
+}
+  }
+}

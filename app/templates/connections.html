@@ -1,0 +1,326 @@
+{% extends "base.html" %}
+{% block title %}DB Connections — dbadeeds.ai{% endblock %}
+{% block page_title %}🔌 Database Connections{% endblock %}
+{% set active_page = 'db_connections' %}
+
+{% block head %}
+<style>
+  /* ── Tabs ────────────────────────────────────────────────────────── */
+  .ctabs { display:flex; gap:0; border-bottom:2px solid var(--border); margin-bottom:20px; }
+  .ctab  { padding:10px 22px; font-size:13px; font-weight:600; cursor:pointer;
+    border-bottom:3px solid transparent; margin-bottom:-2px; color:var(--muted);
+    transition:all .15s; background:none; border-left:none; border-right:none; border-top:none; }
+  .ctab:hover  { color:var(--accent); }
+  .ctab.active { color:var(--accent); border-bottom-color:var(--accent); }
+  .cpanel      { display:none; }
+  .cpanel.active { display:block; }
+
+  /* ── Connection card ─────────────────────────────────────────────── */
+  .conn-card { background:var(--surface); border:1px solid var(--border); border-radius:10px;
+    padding:18px; margin-bottom:12px; box-shadow:var(--shadow); }
+  .conn-card.is-active { border-color:var(--success); border-width:2px; }
+  .conn-header { display:flex; justify-content:space-between; align-items:flex-start; }
+  .conn-title  { font-weight:600; font-size:14px; display:flex; align-items:center; gap:8px; }
+  .badge { font-size:10px; font-weight:700; padding:2px 8px; border-radius:4px; }
+  .badge-oracle   { background:#fff3cd; color:#856404; border:1px solid #ffc107; }
+  .badge-postgres { background:#cfe2ff; color:#084298; border:1px solid #0d6efd; }
+  .badge-active   { background:#d1e7dd; color:#0a3622; border:1px solid #198754; }
+  .conn-cs { font-size:11px; color:var(--muted); margin-top:4px; font-family:var(--mono); word-break:break-all; }
+  .conn-fields { display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:8px;
+    margin-top:10px; background:var(--bg); border-radius:6px; padding:10px 14px; }
+  .conn-field label { font-size:10px; text-transform:uppercase; color:var(--muted); display:block; }
+  .conn-field span  { font-family:var(--mono); font-size:12px; font-weight:500; }
+  .conn-actions { display:flex; gap:6px; margin-top:12px; flex-wrap:wrap; }
+  .status-pill { font-size:11px; font-weight:600; padding:2px 9px; border-radius:4px; }
+  .s-connected { background:#d1e7dd; color:#0a3622; }
+  .s-failed    { background:#f8d7da; color:#842029; }
+  .s-untested  { background:#e2e8f0; color:#64748b; }
+
+  /* ── Add/Edit form ───────────────────────────────────────────────── */
+  .add-panel  { display:none; }
+  .add-panel.open { display:block; }
+  .edit-panel { display:none; background:var(--bg); border-radius:8px;
+    padding:14px; margin-top:12px; border:1px solid var(--border); }
+  .edit-panel.open { display:block; }
+  .cs-hint  { font-size:11px; color:var(--muted); margin-top:4px; font-family:var(--mono); }
+  .cops-kv  { display:grid; grid-template-columns:1fr 1fr; gap:6px 20px; margin:10px 0; }
+  .cops-kv dt { font-size:11px; color:var(--muted); text-transform:uppercase; }
+  .cops-kv dd { font-family:var(--mono); font-size:12px; font-weight:500; margin:0; }
+  .cs-preview { font-family:var(--mono); font-size:11px; background:#0f172a; color:#e2e8f0;
+    padding:8px 12px; border-radius:6px; word-break:break-all; margin:10px 0; }
+
+  .empty-state { text-align:center; padding:50px; color:var(--muted); }
+  .empty-state .eicon { font-size:48px; margin-bottom:12px; }
+</style>
+{% endblock %}
+
+{% block content %}
+
+<!-- ── Tab bar ───────────────────────────────────────────────────────── -->
+<div class="ctabs" id="ctabBar">
+  <button class="ctab active" id="ctab-oracle"   onclick="connTab('oracle')">🔶 Oracle</button>
+  <button class="ctab"        id="ctab-postgres" onclick="connTab('postgres')">🐘 PostgreSQL</button>
+</div>
+
+<!-- ══ ORACLE PANEL ════════════════════════════════════════════════ -->
+<div class="cpanel active" id="cpanel-oracle">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <strong id="oracle-count">Loading…</strong>
+    <button class="btn btn-primary" onclick="toggleAdd('oracle')">➕ Add Oracle Connection</button>
+  </div>
+
+  <div class="card add-panel" id="add-oracle" style="margin-bottom:16px">
+    <div class="card-title">➕ New Oracle Connection</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Connection Name *</label>
+        <input class="form-input" id="o-name" placeholder="Production Oracle"/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Hostname *</label>
+        <input class="form-input" id="o-host" placeholder="192.168.1.100" oninput="previewOracle()"/></div>
+      <div class="form-group" style="max-width:120px"><label class="form-label">Port *</label>
+        <input class="form-input" id="o-port" value="1521" oninput="previewOracle()"/></div>
+      <div class="form-group"><label class="form-label">Service Name *</label>
+        <input class="form-input" id="o-service" placeholder="ORCL" oninput="previewOracle()"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Username *</label>
+        <input class="form-input" id="o-user" placeholder="system" oninput="previewOracle()"/></div>
+      <div class="form-group"><label class="form-label">Password *</label>
+        <input class="form-input" id="o-pass" type="password" placeholder="••••••••"/></div>
+    </div>
+    <div class="cs-hint">Preview: <span id="o-preview" style="color:var(--accent)">user/****@host:1521/service</span></div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-primary" onclick="addConn('oracle')">💾 Save Connection</button>
+      <button class="btn btn-secondary" onclick="toggleAdd('oracle')">Cancel</button>
+    </div>
+  </div>
+
+  <div id="oracle-list"></div>
+</div>
+
+<!-- ══ POSTGRES PANEL ══════════════════════════════════════════════ -->
+<div class="cpanel" id="cpanel-postgres">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">
+    <strong id="postgres-count">Loading…</strong>
+    <button class="btn btn-primary" onclick="toggleAdd('postgres')">➕ Add PostgreSQL Connection</button>
+  </div>
+
+  <div class="card add-panel" id="add-postgres" style="margin-bottom:16px">
+    <div class="card-title">➕ New PostgreSQL Connection</div>
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Connection Name *</label>
+        <input class="form-input" id="p-name" placeholder="Production PostgreSQL"/>
+      </div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Hostname *</label>
+        <input class="form-input" id="p-host" placeholder="localhost" oninput="previewPg()"/></div>
+      <div class="form-group" style="max-width:120px"><label class="form-label">Port *</label>
+        <input class="form-input" id="p-port" value="5432" oninput="previewPg()"/></div>
+      <div class="form-group"><label class="form-label">Database Name *</label>
+        <input class="form-input" id="p-dbname" placeholder="postgres" oninput="previewPg()"/></div>
+    </div>
+    <div class="form-row">
+      <div class="form-group"><label class="form-label">Username *</label>
+        <input class="form-input" id="p-user" placeholder="postgres" oninput="previewPg()"/></div>
+      <div class="form-group"><label class="form-label">Password *</label>
+        <input class="form-input" id="p-pass" type="password" placeholder="••••••••"/></div>
+    </div>
+    <div class="cs-hint">Preview: <span id="p-preview" style="color:var(--accent)">postgresql://user:****@host:5432/dbname</span></div>
+    <div style="display:flex;gap:8px;margin-top:12px">
+      <button class="btn btn-primary" onclick="addConn('postgres')">💾 Save Connection</button>
+      <button class="btn btn-secondary" onclick="toggleAdd('postgres')">Cancel</button>
+    </div>
+  </div>
+
+  <div id="postgres-list"></div>
+</div>
+
+<script>
+/* ── State ──────────────────────────────────────────────────────── */
+let allConns = [];
+
+/* ── Tab switching (own function — no conflict with base.html) ──── */
+function connTab(name) {
+  document.querySelectorAll('.ctab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.cpanel').forEach(p => p.classList.remove('active'));
+  document.getElementById('ctab-'  + name).classList.add('active');
+  document.getElementById('cpanel-'+ name).classList.add('active');
+}
+
+/* ── Load ──────────────────────────────────────────────────────── */
+document.addEventListener('DOMContentLoaded', loadConns);
+
+async function loadConns() {
+  const data = await api('GET', '/connections/');
+  if (!data) return;
+  allConns = data.connections || [];
+  renderAll();
+}
+
+function renderAll() {
+  const oracle = allConns.filter(c => c.db_type === 'oracle');
+  const pg     = allConns.filter(c => c.db_type === 'postgres');
+  document.getElementById('oracle-count').textContent   = `${oracle.length} Oracle connection(s)`;
+  document.getElementById('postgres-count').textContent = `${pg.length} PostgreSQL connection(s)`;
+  document.getElementById('oracle-list').innerHTML   = oracle.length ? oracle.map(buildCard).join('') : emptyState('Oracle');
+  document.getElementById('postgres-list').innerHTML = pg.length    ? pg.map(buildCard).join('')    : emptyState('PostgreSQL');
+}
+
+function emptyState(label) {
+  return `<div class="empty-state">
+    <div class="eicon">🔌</div>
+    <h3>No ${label} connections yet</h3>
+    <p>Click "Add ${label} Connection" to get started.</p>
+  </div>`;
+}
+
+function buildCard(c) {
+  const sCls = c.status === 'connected' ? 's-connected' : c.status === 'failed' ? 's-failed' : 's-untested';
+  const sLbl = c.status === 'connected' ? '✓ Connected' : c.status === 'failed' ? '✗ Failed' : '○ Untested';
+  const dbBadge = c.db_type === 'oracle'
+    ? `<span class="badge badge-oracle">Oracle</span>`
+    : `<span class="badge badge-postgres">PostgreSQL</span>`;
+  const actBadge = c.is_active ? `<span class="badge badge-active">✓ Active</span>` : '';
+
+  const fields = (c.host) ? `
+    <div class="conn-fields">
+      <div class="conn-field"><label>Host</label><span>${esc(c.host)}</span></div>
+      <div class="conn-field"><label>Port</label><span>${esc(c.port||'—')}</span></div>
+      <div class="conn-field"><label>User</label><span>${esc(c.db_user||'—')}</span></div>
+      <div class="conn-field"><label>Service/DB</label><span>${esc(c.service_or_db||'—')}</span></div>
+      ${c.imported_from ? `<div class="conn-field"><label>Source</label><span>${esc(c.imported_from)}</span></div>` : ''}
+    </div>` : '';
+
+  const editFields = c.db_type === 'oracle' ? `
+    <div class="form-group"><label class="form-label">Host</label>
+      <input class="form-input" id="eh_${c.id}" value="${esc(c.host||'')}"/></div>
+    <div class="form-group" style="max-width:120px"><label class="form-label">Port</label>
+      <input class="form-input" id="ep_${c.id}" value="${esc(c.port||'1521')}"/></div>
+    <div class="form-group"><label class="form-label">Service</label>
+      <input class="form-input" id="es_${c.id}" value="${esc(c.service_or_db||'')}"/></div>
+    <div class="form-group"><label class="form-label">User</label>
+      <input class="form-input" id="eu_${c.id}" value="${esc(c.db_user||'')}"/></div>
+    <div class="form-group"><label class="form-label">New Password</label>
+      <input class="form-input" id="epw_${c.id}" type="password" placeholder="Leave blank to keep"/></div>` : `
+    <div class="form-group"><label class="form-label">Host</label>
+      <input class="form-input" id="eh_${c.id}" value="${esc(c.host||'')}"/></div>
+    <div class="form-group" style="max-width:120px"><label class="form-label">Port</label>
+      <input class="form-input" id="ep_${c.id}" value="${esc(c.port||'5432')}"/></div>
+    <div class="form-group"><label class="form-label">Database</label>
+      <input class="form-input" id="es_${c.id}" value="${esc(c.service_or_db||'')}"/></div>
+    <div class="form-group"><label class="form-label">User</label>
+      <input class="form-input" id="eu_${c.id}" value="${esc(c.db_user||'')}"/></div>
+    <div class="form-group"><label class="form-label">New Password</label>
+      <input class="form-input" id="epw_${c.id}" type="password" placeholder="Leave blank to keep"/></div>`;
+
+  return `<div class="conn-card${c.is_active ? ' is-active' : ''}" id="card_${c.id}">
+    <div class="conn-header">
+      <div>
+        <div class="conn-title">${esc(c.name)} ${dbBadge} ${actBadge}</div>
+        <div class="conn-cs">${esc(c.connection_string)}</div>
+      </div>
+      <span class="status-pill ${sCls}">${sLbl}</span>
+    </div>
+    ${fields}
+    <div class="conn-actions">
+      <button class="btn btn-secondary" style="font-size:12px" onclick="testConn('${c.id}',this)">🔍 Test</button>
+      <button class="btn btn-secondary" style="font-size:12px" onclick="${c.is_active ? `deactivate('${c.id}')` : `activate('${c.id}')`}">
+        ${c.is_active ? '🔴 Deactivate' : '🟢 Set Active'}</button>
+      <button class="btn btn-secondary" style="font-size:12px" onclick="toggleEdit('${c.id}')">✏️ Edit</button>
+      <button class="btn btn-secondary" style="font-size:12px;color:var(--danger)" onclick="delConn('${c.id}','${esc(c.name)}')">🗑️ Delete</button>
+    </div>
+    <div class="edit-panel" id="edit_${c.id}">
+      <div class="form-row">
+        <div class="form-group"><label class="form-label">Name</label>
+          <input class="form-input" id="en_${c.id}" value="${esc(c.name)}"/></div>
+        ${editFields}
+      </div>
+      <div style="display:flex;gap:8px;margin-top:8px">
+        <button class="btn btn-primary" style="font-size:12px" onclick="saveEdit('${c.id}')">💾 Save</button>
+        <button class="btn btn-secondary" style="font-size:12px" onclick="toggleEdit('${c.id}')">Cancel</button>
+      </div>
+    </div>
+  </div>`;
+}
+
+/* ── Toggle helpers ─────────────────────────────────────────────── */
+function toggleAdd(type) { document.getElementById('add-' + type).classList.toggle('open'); }
+function toggleEdit(id)  { document.getElementById('edit_' + id).classList.toggle('open'); }
+
+/* ── Live previews ──────────────────────────────────────────────── */
+function previewOracle() {
+  const u=g('o-user'),h=g('o-host'),p=g('o-port'),s=g('o-service');
+  document.getElementById('o-preview').textContent = `${u||'user'}/****@${h||'host'}:${p||'1521'}/${s||'service'}`;
+}
+function previewPg() {
+  const u=g('p-user'),h=g('p-host'),p=g('p-port'),d=g('p-dbname');
+  document.getElementById('p-preview').textContent = `postgresql://${u||'user'}:****@${h||'host'}:${p||'5432'}/${d||'dbname'}`;
+}
+function g(id) { return (document.getElementById(id)||{}).value||''; }
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+
+/* ── Add connection ─────────────────────────────────────────────── */
+async function addConn(dbtype) {
+  const body = dbtype === 'oracle'
+    ? { name:g('o-name'), db_type:'oracle', host:g('o-host'), port:g('o-port'), service_or_db:g('o-service'), db_user:g('o-user'), password:g('o-pass') }
+    : { name:g('p-name'), db_type:'postgres', host:g('p-host'), port:g('p-port'), service_or_db:g('p-dbname'), db_user:g('p-user'), password:g('p-pass') };
+
+  const res = await apiFetch('/api/connections/', 'POST', body);
+  const d   = await res.json();
+  if (res.ok) { toggleAdd(dbtype); loadConns(); showToast('Connection saved!'); }
+  else         { showToast((d.errors||[d.error||'Save failed']).join(', '), 'danger'); }
+}
+
+/* ── Save edit ──────────────────────────────────────────────────── */
+async function saveEdit(id) {
+  const body = {
+    name: g('en_'+id), host: g('eh_'+id), port: g('ep_'+id),
+    service_or_db: g('es_'+id), db_user: g('eu_'+id), password: g('epw_'+id),
+  };
+  const res = await apiFetch(`/api/connections/${id}`, 'PUT', body);
+  if (res.ok) { loadConns(); showToast('Connection updated!'); }
+  else { const d = await res.json(); showToast(d.error||'Update failed', 'danger'); }
+}
+
+/* ── Test ───────────────────────────────────────────────────────── */
+async function testConn(id, btn) {
+  btn.disabled = true; btn.textContent = '⏳ Testing…';
+  const res = await apiFetch(`/api/connections/${id}/test`, 'POST', {});
+  const d   = await res.json();
+  btn.disabled = false; btn.textContent = '🔍 Test';
+  showToast(d.message || (res.ok ? 'Connection successful!' : 'Test failed'), res.ok ? 'success' : 'danger');
+  loadConns();
+}
+
+/* ── Activate / Deactivate / Delete ─────────────────────────────── */
+async function activate(id) {
+  const res = await apiFetch(`/api/connections/${id}/activate`, 'PUT', {});
+  if (res.ok) { loadConns(); showToast('Connection set as active'); }
+}
+async function deactivate(id) {
+  const res = await apiFetch(`/api/connections/${id}/deactivate`, 'PUT', {});
+  if (res.ok) { loadConns(); showToast('Connection deactivated'); }
+}
+async function delConn(id, name) {
+  if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+  const res = await apiFetch(`/api/connections/${id}`, 'DELETE', {});
+  if (res.ok) { loadConns(); showToast('Connection deleted'); }
+  else { const d = await res.json(); showToast(d.error||'Delete failed', 'danger'); }
+}
+
+/* ── apiFetch raw helper (for POST/PUT/DELETE that need res.ok) ──── */
+async function apiFetch(url, method, body) {
+  const opts = { method: method||'GET', credentials:'include',
+    headers: { 'Content-Type': 'application/json' } };
+  if (body && method !== 'GET') opts.body = JSON.stringify(body);
+  const res = await fetch(url, opts);
+  if (res.status === 401) window.location.href = '/login';
+  return res;
+}
+</script>
+{% endblock %}

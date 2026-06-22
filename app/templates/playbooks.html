@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+{% block title %}DBA Playbooks — dbadeeds.ai{% endblock %}
+{% block page_title %}📋 DBA Playbooks{% endblock %}
+{% set active_page = 'dba_playbooks' %}
+
+{% block head %}
+<style>
+  .tabs-row { display:flex; gap:0; border-bottom:2px solid var(--border); margin-bottom:20px; }
+  .tab-btn  { padding:10px 22px; background:none; border:none; font-size:13px; font-weight:600;
+    color:var(--muted); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px;
+    transition:all .15s; font-family:var(--font); }
+  .tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); }
+  .tab-pane        { display:none; }
+  .tab-pane.active { display:block; }
+
+  .playbook-bar { display:flex; gap:10px; align-items:flex-end; margin-bottom:20px; flex-wrap:wrap; }
+  .playbook-bar select { flex:1; min-width:240px; }
+
+  .conn-warn { background:#fffbeb; border:1px solid #fde68a; border-left:4px solid var(--warning);
+    border-radius:8px; padding:12px 16px; font-size:13px; color:#92400e; margin-bottom:16px; }
+  .conn-ok   { background:#f0fdf4; border:1px solid #bbf7d0; border-left:4px solid var(--success);
+    border-radius:8px; padding:10px 16px; font-size:13px; color:#166534; margin-bottom:16px;
+    display:flex; align-items:center; gap:8px; }
+
+  .result-header { font-size:14px; font-weight:600; margin-bottom:6px; color:var(--navy); }
+  .result-meta   { font-size:11px; color:var(--muted); margin-bottom:12px; display:flex; gap:16px; align-items:center; }
+  .table-scroll  { overflow:auto; max-height:520px; border:1px solid var(--border); border-radius:8px; }
+  table { border-collapse:collapse; font-size:12px; width:100%; }
+  th { background:#f8fafc; font-weight:600; color:var(--muted); text-transform:uppercase;
+    font-size:11px; padding:8px 12px; border-bottom:1px solid var(--border); text-align:left;
+    position:sticky; top:0; z-index:1; }
+  td { padding:7px 12px; border-bottom:1px solid var(--border); vertical-align:top; }
+  tr:last-child td { border-bottom:none; }
+  tr:hover td { background:#f9fafb; }
+  .mono-cell { font-family:var(--mono); font-size:11px; max-width:320px; overflow:hidden;
+    text-overflow:ellipsis; white-space:nowrap; }
+
+  .sql-drawer { display:none; background:#0f172a; color:#e2e8f0; border-radius:8px; padding:14px;
+    font-family:var(--mono); font-size:12px; white-space:pre-wrap; margin-top:10px;
+    border:1px solid #334155; max-height:280px; overflow-y:auto; line-height:1.6; }
+  .sql-drawer.open { display:block; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="tabs-row">
+  <button class="tab-btn active" onclick="switchTab('oracle',this)">🔶 Oracle</button>
+  <button class="tab-btn"        onclick="switchTab('postgres',this)">🐘 PostgreSQL</button>
+</div>
+
+<!-- ORACLE TAB -->
+<div class="tab-pane active" id="tab-oracle">
+  <div class="card">
+    <div id="oracle-conn-status"></div>
+    <div class="playbook-bar">
+      <div style="flex:1">
+        <label class="form-label">Select Oracle Playbook</label>
+        <select class="form-select" id="oraclePlaybook"></select>
+      </div>
+      <button class="btn btn-secondary" onclick="previewSQL('oracle')">👁 SQL</button>
+      <button class="btn btn-primary"   onclick="runPlaybook('oracle')">▶️ Run Playbook</button>
+    </div>
+    <div class="sql-drawer" id="oracle-sql-drawer"></div>
+    <div id="oracle-results"></div>
+  </div>
+</div>
+
+<!-- POSTGRES TAB -->
+<div class="tab-pane" id="tab-postgres">
+  <div class="card">
+    <div id="postgres-conn-status"></div>
+    <div class="playbook-bar">
+      <div style="flex:1">
+        <label class="form-label">Select PostgreSQL Playbook</label>
+        <select class="form-select" id="postgresPlaybook"></select>
+      </div>
+      <button class="btn btn-secondary" onclick="previewSQL('postgres')">👁 SQL</button>
+      <button class="btn btn-primary"   onclick="runPlaybook('postgres')">▶️ Run Playbook</button>
+    </div>
+    <div class="sql-drawer" id="postgres-sql-drawer"></div>
+    <div id="postgres-results"></div>
+  </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', async () => {
+  const d = await apicall('GET', '/playbooks/list');
+  if (!d) return;
+  const oSel = document.getElementById('oraclePlaybook');
+  const pSel = document.getElementById('postgresPlaybook');
+  (d.oracle||[]).forEach(pb => {
+    const o = document.createElement('option');
+    o.value = pb.key; o.textContent = pb.label;
+    oSel.appendChild(o);
+  });
+  (d.postgres||[]).forEach(pb => {
+    const o = document.createElement('option');
+    o.value = pb.key; o.textContent = pb.label;
+    pSel.appendChild(o);
+  });
+  checkConn('oracle');
+  checkConn('postgres');
+});
+
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-'+name).classList.add('active');
+  checkConn(name);
+}
+
+async function checkConn(dbType) {
+  const d  = await apicall('GET', '/connections/active');
+  if (!d) return false;
+  const c  = (d.active||{})[dbType];
+  const el = document.getElementById(dbType+'-conn-status');
+  if (!c) {
+    el.innerHTML = `<div class="conn-warn">⚠️ No active ${dbType.toUpperCase()} connection. <a href="/connections">Go to Connections →</a> and activate one.</div>`;
+    return false;
+  }
+  el.innerHTML = `<div class="conn-ok">✅ <strong>${esc(c.name)}</strong><span style="color:var(--muted);font-size:11px;margin-left:8px">${esc(c.connection_string)}</span></div>`;
+  return true;
+}
+
+async function previewSQL(dbType) {
+  const key    = document.getElementById(dbType+'Playbook').value;
+  const drawer = document.getElementById(dbType+'-sql-drawer');
+  if (drawer.classList.contains('open') && drawer.dataset.key === key) {
+    drawer.classList.remove('open'); return;
+  }
+  drawer.textContent = 'Loading SQL…';
+  drawer.classList.add('open');
+  drawer.dataset.key = key;
+  const d = await apicall('GET', `/playbooks/sql/${dbType}/${key}`);
+  drawer.textContent = (d && d.sql) ? d.sql : (d && d.error ? d.error : 'SQL not found');
+}
+
+async function runPlaybook(dbType) {
+  const sel   = document.getElementById(dbType+'Playbook');
+  const key   = sel.value;
+  const label = sel.options[sel.selectedIndex]?.text || key;
+  const ok    = await checkConn(dbType);
+  if (!ok) return;
+
+  const resEl = document.getElementById(dbType+'-results');
+  resEl.innerHTML = '<div class="spinner" style="margin:30px auto"></div>';
+
+  const d = await apicall('POST', '/playbooks/run', {db_type: dbType, key});
+  if (!d) { resEl.innerHTML = ''; return; }
+
+  if (d.error) {
+    resEl.innerHTML = `<div class="alert alert-danger">⚠️ ${esc(d.error)}</div>`; return;
+  }
+
+  if (!d.columns || !d.columns.length) {
+    resEl.innerHTML = `<div class="alert alert-info">✅ Playbook completed — no rows returned (${d.execution_time_ms}ms)</div>`; return;
+  }
+
+  const rows = d.rows || [];
+  const tbody = rows.map(row =>
+    `<tr>${row.map(v => `<td class="mono-cell" title="${esc(v??'')}">${esc(v??'')}</td>`).join('')}</tr>`
+  ).join('');
+
+  resEl.innerHTML = `
+    <div class="result-header">📋 ${esc(label)}</div>
+    <div class="result-meta">
+      <span>📊 <strong>${rows.length}</strong> rows</span>
+      <span>⏱ ${d.execution_time_ms}ms</span>
+      <span>${dbType.toUpperCase()}</span>
+      <div style="flex:1"></div>
+      <button class="btn btn-secondary btn-sm"
+        onclick='downloadCSV(${JSON.stringify(d.columns)},${JSON.stringify(d.rows)},"${esc(key)}")'>
+        ⬇️ Export CSV
+      </button>
+    </div>
+    <div class="table-scroll">
+      <table>
+        <thead><tr>${d.columns.map(c=>`<th>${esc(c)}</th>`).join('')}</tr></thead>
+        <tbody>${tbody}</tbody>
+      </table>
+    </div>`;
+}
+
+function downloadCSV(columns, rows, name) {
+  const header = columns.map(c=>`"${String(c).replace(/"/g,'""')}"`).join(',');
+  const body   = rows.map(r=>r.map(v=>`"${String(v??'').replace(/"/g,'""')}"`).join(',')).join('\n');
+  const blob   = new Blob([header+'\n'+body], {type:'text/csv'});
+  const a      = document.createElement('a');
+  a.href       = URL.createObjectURL(blob);
+  a.download   = `playbook_${name}_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+async function apicall(method, path, body) {
+  const opts = {method, credentials:'include', headers:{'Content-Type':'application/json'}};
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch('/api'+path, opts);
+  if (r.status === 401) { window.location.href='/login'; return null; }
+  return r.json();
+}
+</script>
+{% endblock %}

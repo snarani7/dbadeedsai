@@ -1,0 +1,323 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Login — dbadeeds.ai</title>
+  <!-- Exact same Inter font as Streamlit app -->
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    /* Exact Streamlit color palette */
+    :root {
+      --navy:   #0C4A6E;
+      --accent: #0369A1;
+      --orange: #F97316;
+      --orange-hover: #EA580C;
+      --bg:     #f5f7fa;
+      --border: #E5E7EB;
+      --muted:  #64748B;
+      --text:   #1F2937;
+      --error-bg:  #FEF2F2;
+      --error-bd:  #FCA5A5;
+      --error-txt: #991B1B;
+    }
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Inter', sans-serif;
+      background: var(--bg);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    .login-wrap { width: 100%; max-width: 420px; }
+
+    /* Header matches render_login_page() h1 style */
+    .brand {
+      text-align: center;
+      padding: 2rem 0 1.5rem;
+    }
+    .brand h1 {
+      color: var(--navy);
+      font-size: 2.2rem;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .brand p {
+      color: var(--muted);
+      font-size: 1rem;
+      font-weight: 400;
+    }
+
+    /* Tab row — matches st.radio horizontal */
+    .auth-tabs {
+      display: flex;
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 8px 8px 0 0;
+      overflow: hidden;
+      border-bottom: none;
+    }
+    .auth-tab {
+      flex: 1;
+      padding: 11px 0;
+      text-align: center;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--muted);
+      cursor: pointer;
+      background: #F9FAFB;
+      border: none;
+      font-family: 'Inter', sans-serif;
+      transition: all .15s;
+      border-bottom: 2px solid transparent;
+    }
+    .auth-tab.active {
+      background: white;
+      color: var(--accent);
+      border-bottom: 2px solid var(--accent);
+      font-weight: 600;
+    }
+
+    /* Card — matches Streamlit form area */
+    .card {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 0 0 8px 8px;
+      padding: 28px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.08);
+    }
+    .card h3 {
+      font-size: 16px;
+      font-weight: 600;
+      color: var(--navy);
+      margin-bottom: 20px;
+    }
+
+    .form-group { margin-bottom: 14px; }
+    .form-label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--muted);
+      margin-bottom: 5px;
+    }
+    .form-input {
+      width: 100%;
+      padding: 9px 12px;
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      font-size: 14px;
+      font-family: 'Inter', sans-serif;
+      color: var(--text);
+      background: white;
+      transition: border .15s, box-shadow .15s;
+    }
+    .form-input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(3,105,161,.15);
+    }
+    .form-input::placeholder { color: #9CA3AF; }
+    .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+    /* Orange primary button — exact Streamlit stButton primary */
+    .btn-login {
+      width: 100%;
+      padding: 10px;
+      background: var(--orange);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 500;
+      font-family: 'Inter', sans-serif;
+      cursor: pointer;
+      transition: all .2s ease;
+      box-shadow: 0 1px 2px rgba(0,0,0,.05);
+      margin-top: 8px;
+    }
+    .btn-login:hover   { background: var(--orange-hover); box-shadow: 0 4px 6px rgba(249,115,22,.25); }
+    .btn-login:disabled { background: #E5E7EB; cursor: not-allowed; color: #9CA3AF; box-shadow: none; }
+
+    /* Matches st.info / st.error */
+    .alert-info {
+      background: #EFF6FF; border: 1px solid #BFDBFE;
+      border-radius: 8px; padding: 10px 14px;
+      font-size: 13px; color: #1E40AF; margin-top: 14px;
+    }
+    .alert-error {
+      background: var(--error-bg); border: 1px solid var(--error-bd);
+      border-radius: 8px; padding: 10px 14px;
+      font-size: 13px; color: var(--error-txt);
+      margin-top: 14px; display: none;
+    }
+
+    /* HR — matches st.markdown("---") */
+    .divider { height: 1px; background: var(--border); margin: 20px 0; }
+
+    .tab-pane { display: none; }
+    .tab-pane.active { display: block; }
+
+    .footer {
+      text-align: center;
+      margin-top: 20px;
+      color: #9CA3AF;
+      font-size: 12px;
+    }
+  </style>
+</head>
+<body>
+<div class="login-wrap">
+
+  <!-- Header — matches render_login_page() brand section -->
+  <div class="brand">
+    <h1>🤖 dbadeeds.ai</h1>
+    <p>AI Database Intelligence Platform</p>
+  </div>
+
+  <!-- Auth method tabs — matches st.radio "Authentication Method" horizontal -->
+  <div class="auth-tabs">
+    <button class="auth-tab active" onclick="switchAuthTab('static', this)">Static Login</button>
+    <button class="auth-tab"        onclick="switchAuthTab('ad', this)">Active Directory</button>
+  </div>
+
+  <div class="card">
+
+    <!-- STATIC LOGIN -->
+    <div class="tab-pane active" id="tab-static">
+      <h3>🔐 Login</h3>
+      <div class="form-group">
+        <label class="form-label">Username</label>
+        <input class="form-input" id="username" type="text" placeholder="admin" autocomplete="username" autofocus/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input class="form-input" id="password" type="password" placeholder="Enter your password" autocomplete="current-password"/>
+      </div>
+      <button class="btn-login" id="loginBtn" onclick="doLogin()">🚀 Sign In</button>
+      <div class="alert-error" id="errorMsg"></div>
+      <div class="alert-info" id="demoHint">💡 Default credentials: admin / admin</div>
+    </div>
+
+    <!-- ACTIVE DIRECTORY LOGIN -->
+    <div class="tab-pane" id="tab-ad">
+      <h3>🏢 Active Directory Login</h3>
+      <div class="form-group">
+        <label class="form-label">Username</label>
+        <input class="form-input" id="ad-username" placeholder="username or user@domain.com"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Password</label>
+        <input class="form-input" id="ad-password" type="password" placeholder="Enter your AD password"/>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Domain</label>
+          <input class="form-input" id="ad-domain" placeholder="example.com"/>
+        </div>
+        <div class="form-group">
+          <label class="form-label">AD Server</label>
+          <input class="form-input" id="ad-server" placeholder="dc01.example.com"/>
+        </div>
+      </div>
+      <button class="btn-login" onclick="doADLogin()">🚀 Login with AD</button>
+      <div class="alert-error" id="adErrorMsg"></div>
+    </div>
+
+  </div>
+
+  <div class="footer">
+    © 2024–2026 dbadeeds.ai · Oracle &amp; PostgreSQL AI Assistant
+  </div>
+</div>
+
+<script>
+  // Enter key on password
+  document.getElementById('password').addEventListener('keydown', e => {
+    if (e.key === 'Enter') doLogin();
+  });
+
+  function switchAuthTab(name, btn) {
+    document.querySelectorAll('.auth-tab').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(`tab-${name}`).classList.add('active');
+  }
+
+  async function doLogin() {
+    const username = document.getElementById('username').value.trim();
+    const password = document.getElementById('password').value;
+    const btn      = document.getElementById('loginBtn');
+    const errEl    = document.getElementById('errorMsg');
+    const hint     = document.getElementById('demoHint');
+
+    if (!username || !password) { showErr('Please enter username and password.'); return; }
+
+    btn.disabled    = true;
+    btn.textContent = 'Signing in…';
+    errEl.style.display = 'none';
+
+    try {
+      const resp = await fetch('/api/auth/login', {
+        method:      'POST',
+        credentials: 'include',
+        headers:     { 'Content-Type': 'application/json' },
+        body:        JSON.stringify({ username, password }),
+      });
+      const data = await resp.json();
+      if (resp.ok) {
+        hint.style.display = 'none';
+        window.location.href = '/dashboard';
+      } else {
+        showErr(data.error || 'Invalid username or password');
+        btn.disabled    = false;
+        btn.textContent = '🚀 Sign In';
+      }
+    } catch (e) {
+      showErr('Network error — please check your connection.');
+      btn.disabled    = false;
+      btn.textContent = '🚀 Sign In';
+    }
+  }
+
+  async function doADLogin() {
+    const username = document.getElementById('ad-username').value.trim();
+    const password = document.getElementById('ad-password').value;
+    const domain   = document.getElementById('ad-domain').value.trim();
+    const server   = document.getElementById('ad-server').value.trim();
+    const errEl    = document.getElementById('adErrorMsg');
+
+    if (!username || !password || !domain || !server) {
+      errEl.textContent    = '⚠️ All fields are required for AD login.';
+      errEl.style.display  = 'block';
+      return;
+    }
+    errEl.style.display = 'none';
+    // Fall back to static login using AD username — extend backend for full LDAP if needed
+    const resp = await fetch('/api/auth/login', {
+      method: 'POST', credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password }),
+    });
+    const data = await resp.json();
+    if (resp.ok) {
+      window.location.href = '/dashboard';
+    } else {
+      errEl.textContent   = '⚠️ ' + (data.error || 'AD authentication failed.');
+      errEl.style.display = 'block';
+    }
+  }
+
+  function showErr(msg) {
+    const el = document.getElementById('errorMsg');
+    el.textContent   = '❌ ' + msg;
+    el.style.display = 'block';
+  }
+</script>
+</body>
+</html>

@@ -1,0 +1,729 @@
+{% extends "base.html" %}
+{% block title %}AI Agents — dbadeeds.ai{% endblock %}
+{% block page_title %}🤖 AI Agents{% endblock %}
+{% set active_page = 'ai_agents' %}
+
+{% block head %}
+<script src="/static/js/conversations.js"></script>
+<style>
+  /* ── Metric cards ── */
+  .metrics-row { display:flex; gap:12px; margin-bottom:20px; }
+  .metric-card { flex:1; background:#fff; border:1px solid var(--border); border-radius:10px; padding:14px 18px; }
+  .metric-card .val { font-size:24px; font-weight:700; color:var(--navy); }
+  .metric-card .lbl { font-size:11px; color:var(--muted); text-transform:uppercase; letter-spacing:.06em; margin-top:2px; }
+
+  /* ── Tabs ── */
+  .tabs-row { display:flex; gap:0; border-bottom:2px solid var(--border); margin-bottom:20px; flex-wrap:wrap; }
+  .tab-btn  { padding:10px 20px; background:none; border:none; border-bottom:2px solid transparent;
+               font-size:13px; font-weight:500; color:var(--muted); cursor:pointer; margin-bottom:-2px; transition:all .15s; }
+  .tab-btn:hover  { color:var(--text); }
+  .tab-btn.active { color:var(--accent); border-bottom-color:var(--accent); font-weight:600; }
+  .tab-pane { display:none; }
+  .tab-pane.active { display:block; }
+
+  /* ── Agent cards (mirrors Streamlit) ── */
+  .agent-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:14px; }
+  .agent-card { background:#fff; border:1px solid var(--border); border-radius:10px; padding:16px 18px; }
+  .agent-card.oracle-card  { border-left:3px solid #F97316; }
+  .agent-card.pg-card      { border-left:3px solid #3B82F6; }
+  .agent-card-name { font-weight:600; font-size:14px; color:#111827; margin-bottom:6px; }
+  .agent-tag { display:inline-block; padding:2px 8px; border-radius:12px; font-size:11px; font-weight:600;
+               margin-right:4px; margin-bottom:6px; }
+  .agent-tag.oracle { background:#FFF7ED; color:#C2410C; }
+  .agent-tag.pg     { background:#EFF6FF; color:#1D4ED8; }
+  .agent-tag.type   { background:#F3F4F6; color:#374151; }
+  .agent-card-desc  { font-size:12px; color:#4B5563; line-height:1.5; margin-bottom:10px; }
+  .agent-card-tools { font-size:11px; color:#9CA3AF; margin-bottom:12px; }
+  .agent-card-btns  { display:flex; gap:8px; }
+
+  /* ── Deployed agent section ── */
+  .section-heading { font-weight:600; font-size:15px; color:var(--navy); margin:20px 0 10px; padding-top:16px; border-top:1px solid var(--border); }
+  .deployed-card { background:#F9FAFB; border:1px solid var(--border); border-radius:8px; padding:12px 16px; margin-bottom:8px; display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+  .deployed-card-info { flex:1; min-width:200px; }
+  .deployed-card-name { font-weight:600; font-size:13px; color:var(--navy); }
+  .deployed-card-desc { font-size:12px; color:var(--muted); margin-top:2px; }
+  .deployed-card-btns { display:flex; gap:6px; flex-shrink:0; }
+
+  /* ── Create form ── */
+  .form-row { display:grid; grid-template-columns:1fr 1fr; gap:14px; margin-bottom:14px; }
+  .form-group { margin-bottom:14px; }
+  .form-label { font-size:12px; font-weight:600; color:var(--muted); margin-bottom:5px; display:block; text-transform:uppercase; letter-spacing:.04em; }
+  .form-input, .form-select, .form-textarea {
+    width:100%; padding:9px 12px; border:1px solid var(--border); border-radius:8px;
+    font-size:13px; font-family:var(--font); background:#fff; color:var(--text);
+    box-sizing:border-box; transition:border .15s;
+  }
+  .form-input:focus, .form-select:focus, .form-textarea:focus { outline:none; border-color:var(--accent); }
+  .form-textarea { resize:vertical; min-height:80px; }
+  .form-prompt  { min-height:200px; font-family:var(--mono); font-size:12px; }
+  .tools-check  { display:flex; gap:16px; flex-wrap:wrap; margin-top:4px; }
+  .tools-check label { display:flex; align-items:center; gap:6px; font-size:13px; cursor:pointer; }
+
+  /* ── Run agent chat ── */
+  .run-layout { display:flex; gap:16px; }
+  .run-sidebar { width:220px; flex-shrink:0; }
+  .run-main   { flex:1; min-width:0; }
+  .agent-select-item {
+    padding:10px 12px; border-radius:8px; cursor:pointer; font-size:13px;
+    border:1px solid var(--border); background:#fff; margin-bottom:6px;
+    transition:background .1s;
+  }
+  .agent-select-item:hover { background:#F3F4F6; }
+  .agent-select-item.selected { background:#EFF6FF; border-color:#3B82F6; }
+  .chat-area { display:flex; flex-direction:column; height:calc(100vh - 280px); min-height:400px; }
+  .chat-msgs  { flex:1; overflow-y:auto; display:flex; flex-direction:column; gap:12px; padding:4px 0; }
+  .msg        { display:flex; gap:10px; animation:fadeIn .2s ease; }
+  @keyframes fadeIn { from{opacity:0;transform:translateY(4px)} to{opacity:1;transform:none} }
+  .msg-avatar { width:32px; height:32px; border-radius:8px; flex-shrink:0; display:flex; align-items:center; justify-content:center; font-size:15px; }
+  .msg.user      .msg-avatar { background:#DBEAFE; }
+  .msg.assistant .msg-avatar { background:#FEF3C7; }
+  .msg-bubble { background:#fff; border:1px solid var(--border); border-radius:8px; padding:12px 16px; flex:1; font-size:13px; line-height:1.7; color:var(--text); }
+  .msg.user .msg-bubble { background:#EFF6FF; border-color:#BFDBFE; }
+  .msg-bubble pre { background:#0F172A; color:#e2e8f0; padding:12px; border-radius:6px; overflow-x:auto; font-family:var(--mono); font-size:11px; margin:8px 0; white-space:pre-wrap; }
+  .msg-bubble code { font-family:var(--mono); font-size:11px; background:#f1f5f9; padding:1px 5px; border-radius:3px; }
+  .msg-bubble pre code { background:none; padding:0; }
+  .cursor { display:inline-block; width:2px; height:14px; background:var(--accent); animation:blink .7s step-end infinite; vertical-align:middle; margin-left:2px; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0} }
+  .chat-input-row { display:flex; gap:8px; padding-top:10px; border-top:1px solid var(--border); flex-shrink:0; }
+  .chat-input { flex:1; padding:10px 14px; border:1px solid var(--border); border-radius:8px; font-size:13px; font-family:var(--font); resize:none; min-height:42px; max-height:120px; }
+  .chat-input:focus { outline:none; border-color:var(--accent); }
+  .btn-send { padding:10px 16px; background:var(--orange); color:#fff; border:none; border-radius:8px; cursor:pointer; font-size:15px; }
+  .btn-send:hover { background:var(--orange-hover); }
+  .btn-send:disabled { background:var(--border); cursor:not-allowed; }
+  .chat-meta-bar { display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; font-size:12px; color:var(--muted); }
+
+  /* ── Playbooks ── */
+  .pb-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:12px; margin-bottom:20px; }
+  .pb-card { border:1px solid var(--border); border-radius:10px; padding:14px 16px; background:#fff; cursor:pointer; transition:all .15s; }
+  .pb-card:hover { border-color:var(--accent); background:#f8faff; }
+  .pb-card.selected { border-color:var(--accent); border-left-width:3px; background:#EFF6FF; }
+  .pb-card-name { font-weight:600; font-size:13px; color:var(--navy); margin-bottom:4px; }
+  .pb-card-meta { font-size:11px; color:var(--muted); }
+  .pb-check-item { padding:6px 12px; background:#F9FAFB; border-left:3px solid var(--accent); border-radius:0 6px 6px 0; margin-bottom:6px; font-size:13px; }
+  .pb-result-item { border:1px solid var(--border); border-radius:8px; overflow:hidden; margin-bottom:12px; }
+  .pb-result-header { background:#F1F5F9; padding:10px 14px; font-weight:600; font-size:13px; display:flex; align-items:center; gap:8px; }
+  .pb-result-body { padding:12px 16px; font-size:13px; line-height:1.7; }
+  .pb-result-body pre { background:#0F172A; color:#e2e8f0; padding:10px 12px; border-radius:6px; font-family:var(--mono); font-size:11px; overflow-x:auto; white-space:pre-wrap; margin:8px 0; }
+  .progress-bar-wrap { background:#E5E7EB; border-radius:99px; height:6px; margin:8px 0; overflow:hidden; }
+  .progress-bar { background:var(--accent); height:100%; border-radius:99px; transition:width .4s; }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Metrics row (mirrors Streamlit) -->
+<div class="metrics-row" id="metricsRow">
+  <div class="metric-card"><div class="val" id="metTemplates">—</div><div class="lbl">📋 Templates</div></div>
+  <div class="metric-card"><div class="val" id="metDeployed">—</div><div class="lbl">🤖 Deployed</div></div>
+  <div class="metric-card"><div class="val" id="metPlaybooks">—</div><div class="lbl">📊 Playbooks</div></div>
+</div>
+
+<!-- 4 tabs — mirrors Streamlit: Agent Library | Create Agent | Run Agent | Playbooks -->
+<div class="tabs-row">
+  <button class="tab-btn active" onclick="switchTab('library',this)">📋 Agent Library</button>
+  <button class="tab-btn"        onclick="switchTab('create',this)">➕ Create Agent</button>
+  <button class="tab-btn"        onclick="switchTab('run',this)">💬 Run Agent</button>
+  <button class="tab-btn"        onclick="switchTab('playbooks',this)">📊 Playbooks</button>
+</div>
+
+<!-- ══════════════════════ TAB 1 — AGENT LIBRARY ══════════════════════ -->
+<div class="tab-pane active" id="tab-library">
+  <!-- DB filter -->
+  <div style="display:flex;gap:8px;margin-bottom:16px;align-items:center">
+    <span style="font-size:12px;color:var(--muted);font-weight:600">Filter:</span>
+    <button class="btn btn-secondary btn-sm filter-btn active" onclick="filterTemplates('all',this)">All</button>
+    <button class="btn btn-secondary btn-sm filter-btn" onclick="filterTemplates('oracle',this)">🔶 Oracle</button>
+    <button class="btn btn-secondary btn-sm filter-btn" onclick="filterTemplates('postgresql',this)">🐘 PostgreSQL</button>
+  </div>
+  <h4 style="margin:0 0 12px;font-size:14px;color:var(--navy)">Templates</h4>
+  <div class="agent-grid" id="templateGrid">
+    <div style="color:var(--muted);font-size:13px">Loading templates…</div>
+  </div>
+
+  <div class="section-heading">Deployed Agents</div>
+  <div id="deployedList">
+    <div style="color:var(--muted);font-size:13px">Loading…</div>
+  </div>
+</div>
+
+<!-- ══════════════════════ TAB 2 — CREATE AGENT ══════════════════════ -->
+<div class="tab-pane" id="tab-create">
+  <h4 style="margin:0 0 4px;font-size:15px;color:var(--navy)">Build a Custom Agent</h4>
+  <p style="margin:0 0 18px;font-size:13px;color:var(--muted)">Create a specialised AI agent for your specific DBA workflow.</p>
+
+  <div class="form-row">
+    <div class="form-group">
+      <label class="form-label">Agent Name *</label>
+      <input class="form-input" id="caName" placeholder="e.g., Oracle Session Monitor">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Model</label>
+      <input class="form-input" id="caModel" value="gpt-4o">
+    </div>
+  </div>
+  <div class="form-row">
+    <div class="form-group">
+      <label class="form-label">Agent Type *</label>
+      <select class="form-select" id="caType">
+        <option value="performance_monitor">Performance Monitor</option>
+        <option value="troubleshooter">Troubleshooter</option>
+        <option value="query_optimizer">Query Optimizer</option>
+        <option value="security_auditor">Security Auditor</option>
+        <option value="capacity_planner">Capacity Planner</option>
+        <option value="custom">Custom</option>
+      </select>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Database *</label>
+      <select class="form-select" id="caDb">
+        <option value="oracle">Oracle</option>
+        <option value="postgresql">PostgreSQL</option>
+      </select>
+    </div>
+  </div>
+  <div class="form-row">
+    <div class="form-group">
+      <label class="form-label">Temperature</label>
+      <input type="range" class="form-input" id="caTemp" min="0" max="1" step="0.1" value="0" oninput="document.getElementById('caTempVal').textContent=this.value" style="padding:6px 12px">
+      <span style="font-size:11px;color:var(--muted)">Value: <span id="caTempVal">0</span></span>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Max Iterations</label>
+      <input type="number" class="form-input" id="caMaxIter" min="1" max="20" value="10">
+    </div>
+  </div>
+  <div class="form-group">
+    <label class="form-label">Description *</label>
+    <textarea class="form-textarea" id="caDesc" placeholder="What does this agent specialise in?"></textarea>
+  </div>
+  <div class="form-group">
+    <label class="form-label">System Prompt *</label>
+    <textarea class="form-textarea form-prompt" id="caPrompt" placeholder="You are an expert DBA assistant specialised in ...&#10;&#10;Your responsibilities:&#10;- Check X&#10;- Analyse Y&#10;&#10;Always provide clear, actionable recommendations."></textarea>
+  </div>
+  <div class="form-group">
+    <label class="form-label">Tools *</label>
+    <div class="tools-check">
+      <label><input type="checkbox" id="toolOracle" value="OracleQueryAgent"> OracleQueryAgent</label>
+      <label><input type="checkbox" id="toolPg" value="PostgresQueryAgent" checked> PostgresQueryAgent</label>
+    </div>
+  </div>
+  <button class="btn btn-primary" onclick="createAgent()">🚀 Create Agent</button>
+  <div id="createStatus" style="margin-top:10px;font-size:13px"></div>
+</div>
+
+<!-- ══════════════════════ TAB 3 — RUN AGENT ══════════════════════ -->
+<div class="tab-pane" id="tab-run">
+  <div id="noAgentsMsg" style="display:none;padding:20px;background:#F9FAFB;border:1px solid var(--border);border-radius:8px;text-align:center;font-size:13px;color:var(--muted)">
+    No agents deployed yet. Go to <strong>Agent Library</strong> → deploy a template first.
+  </div>
+  <div id="runLayout" class="run-layout">
+    <div class="run-sidebar">
+      <div style="font-size:11px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;margin-bottom:8px">Select Agent</div>
+      <div id="agentPickList"></div>
+    </div>
+    <div class="run-main">
+      <div id="selectedAgentCard" style="margin-bottom:12px"></div>
+      <div class="chat-meta-bar">
+        <span class="conv-title" id="convTitle" style="font-size:11.5px;color:var(--muted);font-weight:600;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
+        <button class="conv-btn green" onclick="Convs.saveNow()" style="padding:3px 9px;font-size:11px">&#128190; Save</button>
+        <button class="conv-btn"       onclick="Convs.saveAs()"  style="padding:3px 9px;font-size:11px">&#128190; Save As…</button>
+        <button class="conv-btn"       onclick="Convs.openPanel()" data-conv-open style="padding:3px 9px;font-size:11px">&#128194; Open</button>
+        <button class="conv-btn"       onclick="Convs.newSession()" style="padding:3px 9px;font-size:11px">+ New</button>
+        <div style="flex:1"></div>
+        <span id="runChatMeta" style="color:var(--muted);font-size:11px"></span>
+        <button class="btn btn-secondary btn-sm" onclick="clearRunChat()" id="btnClearRunChat" style="display:none">🗑️ Clear</button>
+      </div>
+      <div class="chat-area">
+        <div class="chat-msgs" id="runChatMsgs"></div>
+        <div class="chat-input-row">
+          <textarea class="chat-input" id="runInput" rows="1" placeholder="Ask the selected agent…"
+            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendAgentMsg()}"
+            oninput="this.style.height='auto';this.style.height=Math.min(this.scrollHeight,120)+'px'"></textarea>
+          <button class="btn-send" id="runSendBtn" onclick="sendAgentMsg()">➤</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ══════════════════════ TAB 4 — PLAYBOOKS ══════════════════════ -->
+<div class="tab-pane" id="tab-playbooks">
+  <h4 style="margin:0 0 4px;font-size:15px;color:var(--navy)">Automated Check Playbooks</h4>
+  <p style="margin:0 0 16px;font-size:13px;color:var(--muted)">A playbook runs a curated sequence of checks and collects all results in one place.</p>
+  <div class="pb-grid" id="pbGrid"></div>
+
+  <div id="pbDetail" style="display:none">
+    <hr style="border:none;border-top:1px solid var(--border);margin:16px 0">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:12px;flex-wrap:wrap;gap:10px">
+      <div>
+        <div style="font-weight:600;font-size:15px;color:var(--navy)" id="pbDetailName"></div>
+        <div style="font-size:12px;color:var(--muted);margin-top:2px" id="pbDetailMeta"></div>
+      </div>
+      <button class="btn btn-primary" onclick="runPlaybook()">▶️ Run Playbook</button>
+    </div>
+    <div style="font-weight:600;font-size:13px;margin-bottom:8px">Checks in this playbook:</div>
+    <div id="pbChecks"></div>
+    <div id="pbProgress" style="display:none;margin:12px 0">
+      <div class="progress-bar-wrap"><div class="progress-bar" id="pbProgressBar" style="width:0%"></div></div>
+      <div style="font-size:12px;color:var(--muted);margin-top:4px" id="pbProgressText">Starting…</div>
+    </div>
+    <div id="pbResults"></div>
+  </div>
+</div>
+
+<script>
+const API = '/api/agents';
+let allTemplates = [];
+let allPlaybooks = {};
+let deployedAgents = [];
+let selectedAgentName = null;
+let runChatHistory = {};    // agentName → [{role,content}]
+let currentFilter  = 'all';
+
+/* ── Tab switching ─────────────────────────────────────── */
+function switchTab(name, btn) {
+  document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+  btn.classList.add('active');
+  document.getElementById('tab-' + name).classList.add('active');
+  if (name === 'run') refreshDeployed();
+}
+
+/* ── Load all data ─────────────────────────────────────── */
+async function loadAll() {
+  const [tRes, dRes, pbRes] = await Promise.all([
+    apiFetch(API + '/templates'),
+    apiFetch(API + '/deployed'),
+    apiFetch(API + '/playbooks'),
+  ]);
+  allTemplates   = tRes.templates || [];
+  deployedAgents = dRes.agents    || [];
+  allPlaybooks   = pbRes.playbooks|| {};
+
+  document.getElementById('metTemplates').textContent = allTemplates.length;
+  document.getElementById('metDeployed').textContent  = deployedAgents.length;
+  document.getElementById('metPlaybooks').textContent = Object.keys(allPlaybooks).length;
+
+  renderTemplates();
+  renderDeployed();
+  renderPlaybooks();
+  renderAgentPickList();
+}
+
+/* ── Template filter ───────────────────────────────────── */
+function filterTemplates(db, btn) {
+  currentFilter = db;
+  document.querySelectorAll('.filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  renderTemplates();
+}
+
+/* ── Template grid ─────────────────────────────────────── */
+function renderTemplates() {
+  const list = currentFilter === 'all' ? allTemplates
+             : allTemplates.filter(t => t.database_type === currentFilter ||
+               (currentFilter === 'postgresql' && t.database_type === 'postgresql'));
+  const grid = document.getElementById('templateGrid');
+  if (!list.length) { grid.innerHTML = '<div style="color:var(--muted);font-size:13px">No templates found.</div>'; return; }
+  grid.innerHTML = list.map((t,i) => {
+    const isOracle = t.database_type === 'oracle';
+    const dbTag    = isOracle ? 'oracle' : 'pg';
+    const dbLabel  = isOracle ? 'ORACLE' : 'POSTGRESQL';
+    const typeLabel= t.agent_type.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+    const tools    = (t.tools||[]).join(', ') || '—';
+    const idx      = allTemplates.indexOf(t);
+    return `
+    <div class="agent-card ${dbTag}-card">
+      <div class="agent-card-name">${isOracle?'🔶':'🐘'} ${esc(t.name)}</div>
+      <span class="agent-tag ${dbTag}">${dbLabel}</span>
+      <span class="agent-tag type">${typeLabel}</span>
+      <div class="agent-card-desc">${esc(t.description)}</div>
+      <div class="agent-card-tools">🔧 ${esc(tools)}</div>
+      <div class="agent-card-btns">
+        <button class="btn btn-primary btn-sm" style="flex:1" onclick="deployTemplate(${idx})">🚀 Deploy</button>
+        <button class="btn btn-secondary btn-sm" onclick="togglePrompt('prompt_${idx}')">📄 Prompt</button>
+      </div>
+      <div id="prompt_${idx}" style="display:none;margin-top:10px">
+        <pre style="background:#0F172A;color:#94a3b8;padding:10px;border-radius:6px;font-size:10px;white-space:pre-wrap;overflow-x:auto;max-height:180px">${esc(t.system_prompt||'')}</pre>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function togglePrompt(id) {
+  const el = document.getElementById(id);
+  if (el) el.style.display = el.style.display === 'none' ? 'block' : 'none';
+}
+
+async function deployTemplate(idx) {
+  const t = allTemplates[idx];
+  if (!t) return;
+  const res = await apiFetch(API + '/deploy', 'POST', { template_name: t.name });
+  if (res.ok) {
+    showToast('✓ ' + t.name + ' deployed!', 'success');
+    await refreshDeployed();
+  } else {
+    showToast('Deploy failed: ' + (res.error||''), 'error');
+  }
+}
+
+/* ── Deployed agents ───────────────────────────────────── */
+async function refreshDeployed() {
+  const dRes     = await apiFetch(API + '/deployed');
+  deployedAgents = dRes.agents || [];
+  document.getElementById('metDeployed').textContent = deployedAgents.length;
+  renderDeployed();
+  renderAgentPickList();
+}
+
+function renderDeployed() {
+  const el = document.getElementById('deployedList');
+  if (!deployedAgents.length) {
+    el.innerHTML = '<div style="color:var(--muted);font-size:13px;padding:12px">No agents deployed yet — deploy a template above or create a custom one.</div>';
+    return;
+  }
+  el.innerHTML = deployedAgents.map(ag => {
+    const isOracle = ag.database_type === 'oracle';
+    const dbTag    = isOracle ? 'oracle' : 'pg';
+    const typeLabel= ag.agent_type.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+    return `
+    <div class="deployed-card">
+      <div class="deployed-card-info">
+        <div class="deployed-card-name">${isOracle?'🔶':'🐘'} ${esc(ag.name)}
+          <span class="agent-tag ${dbTag}" style="margin-left:6px">${ag.database_type.toUpperCase()}</span>
+          <span class="agent-tag type">${typeLabel}</span>
+        </div>
+        <div class="deployed-card-desc">${esc(ag.description)}</div>
+      </div>
+      <div class="deployed-card-btns">
+        <button class="btn btn-primary btn-sm" onclick="goRunAgent('${esc(ag.name)}')">▶ Run</button>
+        <button class="btn btn-secondary btn-sm" onclick="deleteAgent('${esc(ag.name)}')">🗑 Delete</button>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function goRunAgent(name) {
+  switchTab('run', document.querySelector('.tab-btn:nth-child(3)'));
+  selectAgent(name);
+}
+
+async function deleteAgent(name) {
+  if (!confirm('Delete agent "' + name + '"?')) return;
+  const res = await apiFetch(API + '/delete/' + encodeURIComponent(name), 'DELETE');
+  if (res.ok) {
+    showToast('Deleted ' + name, 'success');
+    await refreshDeployed();
+  } else {
+    showToast('Delete failed: ' + (res.error||''), 'error');
+  }
+}
+
+/* ── Create custom agent ───────────────────────────────── */
+async function createAgent() {
+  const name   = document.getElementById('caName').value.trim();
+  const tools  = [];
+  if (document.getElementById('toolOracle').checked) tools.push('OracleQueryAgent');
+  if (document.getElementById('toolPg').checked)     tools.push('PostgresQueryAgent');
+
+  if (!name || !document.getElementById('caDesc').value.trim() ||
+      !document.getElementById('caPrompt').value.trim() || !tools.length) {
+    document.getElementById('createStatus').innerHTML = '<span style="color:var(--danger)">⚠️ Please fill in all required fields (*)</span>';
+    return;
+  }
+  const payload = {
+    name,
+    agent_type:    document.getElementById('caType').value,
+    database_type: document.getElementById('caDb').value,
+    description:   document.getElementById('caDesc').value.trim(),
+    system_prompt: document.getElementById('caPrompt').value.trim(),
+    tools,
+    temperature:   parseFloat(document.getElementById('caTemp').value),
+    model:         document.getElementById('caModel').value.trim() || 'gpt-4o',
+    max_iterations:parseInt(document.getElementById('caMaxIter').value) || 10,
+  };
+  const res = await apiFetch(API + '/create', 'POST', payload);
+  if (res.ok) {
+    document.getElementById('createStatus').innerHTML = `<span style="color:var(--success)">✓ Agent '${esc(name)}' created — go to Agent Library to run it.</span>`;
+    await refreshDeployed();
+  } else {
+    document.getElementById('createStatus').innerHTML = `<span style="color:var(--danger)">Failed: ${esc(res.error||'')}</span>`;
+  }
+}
+
+/* ── Run Agent — agent picker + chat ──────────────────── */
+function renderAgentPickList() {
+  const list = document.getElementById('agentPickList');
+  const msg  = document.getElementById('noAgentsMsg');
+  const lay  = document.getElementById('runLayout');
+  if (!deployedAgents.length) {
+    msg.style.display = 'block'; lay.style.display = 'none'; return;
+  }
+  msg.style.display = 'none'; lay.style.display = 'flex';
+  list.innerHTML = deployedAgents.map(ag => {
+    const sel = ag.name === selectedAgentName ? ' selected' : '';
+    const icon = ag.database_type === 'oracle' ? '🔶' : '🐘';
+    return `<div class="agent-select-item${sel}" onclick="selectAgent('${esc(ag.name)}')">${icon} ${esc(ag.name)}</div>`;
+  }).join('');
+  if (!selectedAgentName && deployedAgents.length) selectAgent(deployedAgents[0].name);
+}
+
+function selectAgent(name) {
+  selectedAgentName = name;
+  document.querySelectorAll('.agent-select-item').forEach(el => {
+    el.classList.toggle('selected', el.textContent.trim().endsWith(name));
+  });
+  const ag = deployedAgents.find(a => a.name === name);
+  if (!ag) return;
+  const isOracle  = ag.database_type === 'oracle';
+  const dbTag     = isOracle ? 'oracle' : 'pg';
+  const typeLabel = ag.agent_type.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+  document.getElementById('selectedAgentCard').innerHTML = `
+    <div class="agent-card ${dbTag}-card" style="margin-bottom:0">
+      <div class="agent-card-name">${isOracle?'🔶':'🐘'} ${esc(ag.name)}</div>
+      <span class="agent-tag ${dbTag}">${ag.database_type.toUpperCase()}</span>
+      <span class="agent-tag type">${typeLabel}</span>
+      <span class="agent-tag type">🌡 ${ag.temperature}</span>
+      <div class="agent-card-desc">${esc(ag.description)}</div>
+    </div>`;
+  renderRunChat();
+}
+
+function renderRunChat() {
+  const msgs = runChatHistory[selectedAgentName] || [];
+  const box  = document.getElementById('runChatMsgs');
+  box.innerHTML = msgs.map(m => buildMsgHTML(m.role, m.content)).join('');
+  box.scrollTop = 9999;
+  const n = msgs.filter(m=>m.role==='user').length;
+  document.getElementById('runChatMeta').textContent = n ? `💬 ${n} exchange(s)` : '';
+  document.getElementById('btnClearRunChat').style.display = msgs.length ? 'inline-block' : 'none';
+}
+
+function clearRunChat() {
+  runChatHistory[selectedAgentName] = [];
+  renderRunChat();
+}
+
+function buildMsgHTML(role, content) {
+  const avatar = role === 'user' ? '👤' : '🤖';
+  return `<div class="msg ${role}">
+    <div class="msg-avatar">${avatar}</div>
+    <div class="msg-bubble">${renderMarkdown(content)}</div>
+  </div>`;
+}
+
+async function sendAgentMsg() {
+  const inp = document.getElementById('runInput');
+  const msg = inp.value.trim();
+  if (!msg || !selectedAgentName) return;
+  inp.value = ''; inp.style.height = 'auto';
+  document.getElementById('runSendBtn').disabled = true;
+
+  if (!runChatHistory[selectedAgentName]) runChatHistory[selectedAgentName] = [];
+  runChatHistory[selectedAgentName].push({ role: 'user', content: msg });
+  renderRunChat();
+
+  const box = document.getElementById('runChatMsgs');
+  const bubbleWrap = document.createElement('div');
+  bubbleWrap.className = 'msg assistant';
+  bubbleWrap.innerHTML = '<div class="msg-avatar">🤖</div><div class="msg-bubble"><span class="cursor"></span></div>';
+  box.appendChild(bubbleWrap);
+  const bubble = bubbleWrap.querySelector('.msg-bubble');
+  box.scrollTop = 9999;
+
+  let full = '';
+  const es = new EventSource(`/api/agents/run/stream?_=${Date.now()}`);
+
+  // Use POST via fetch + ReadableStream instead of GET EventSource
+  es.close();
+
+  const resp = await fetch(API + '/run/stream', {
+    method: 'POST',
+    credentials: 'include', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ agent_name: selectedAgentName, message: msg }),
+  });
+  const reader = resp.body.getReader();
+  const dec    = new TextDecoder();
+
+  function read() {
+    reader.read().then(({ done, value }) => {
+      if (done) return;
+      for (const line of dec.decode(value).split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const p = JSON.parse(line.slice(6));
+          if (p.token) {
+            full += p.token;
+            bubble.innerHTML = renderMarkdown(full) + '<span class="cursor"></span>';
+            box.scrollTop = 9999;
+          } else if (p.status) {
+            bubble.innerHTML = `<span style="color:var(--muted);font-size:12px;font-style:italic">${esc(p.status)}</span>`;
+          } else if (p.done) {
+            bubble.innerHTML = renderMarkdown(full);
+            runChatHistory[selectedAgentName].push({ role: 'assistant', content: full });
+            renderRunChat();
+            document.getElementById('runSendBtn').disabled = false;
+          } else if (p.error) {
+            bubble.innerHTML = `<span style="color:var(--danger)">⚠️ ${esc(p.error)}</span>`;
+            document.getElementById('runSendBtn').disabled = false;
+          }
+        } catch(_) {}
+      }
+      read();
+    });
+  }
+  read();
+}
+
+/* ── Playbooks ─────────────────────────────────────────── */
+let selectedPlaybook = null;
+
+function renderPlaybooks() {
+  const grid = document.getElementById('pbGrid');
+  const keys = Object.keys(allPlaybooks);
+  if (!keys.length) { grid.innerHTML = '<div style="color:var(--muted);font-size:13px">No playbooks defined.</div>'; return; }
+  grid.innerHTML = keys.map(name => {
+    const pb = allPlaybooks[name];
+    return `<div class="pb-card" id="pbcard_${esc(name)}" onclick="selectPlaybook('${esc(name)}')">
+      <div class="pb-card-name">📊 ${esc(name)}</div>
+      <div class="pb-card-meta">${pb.database_type.toUpperCase()} · ${pb.agent_type.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase())} · ${pb.queries.length} checks</div>
+    </div>`;
+  }).join('');
+  if (keys.length) selectPlaybook(keys[0]);
+}
+
+function selectPlaybook(name) {
+  selectedPlaybook = name;
+  document.querySelectorAll('.pb-card').forEach(c => c.classList.remove('selected'));
+  const card = document.getElementById('pbcard_' + name);
+  if (card) card.classList.add('selected');
+
+  const pb = allPlaybooks[name];
+  if (!pb) return;
+  document.getElementById('pbDetail').style.display = 'block';
+  document.getElementById('pbDetailName').textContent = name;
+  document.getElementById('pbDetailMeta').textContent =
+    'Database: ' + pb.database_type.toUpperCase() + '  ·  Type: ' +
+    pb.agent_type.replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
+  document.getElementById('pbChecks').innerHTML = pb.queries.map((q,i) =>
+    `<div class="pb-check-item"><strong>${i+1}.</strong> ${esc(q)}</div>`
+  ).join('');
+  document.getElementById('pbResults').innerHTML = '';
+  document.getElementById('pbProgress').style.display = 'none';
+}
+
+async function runPlaybook() {
+  if (!selectedPlaybook) return;
+  document.getElementById('pbResults').innerHTML = '';
+  document.getElementById('pbProgress').style.display = 'block';
+  document.getElementById('pbProgressBar').style.width = '0%';
+  document.getElementById('pbProgressText').textContent = 'Starting…';
+  const resp  = await fetch(API + '/playbooks/run', {
+    method: 'POST',
+    credentials: 'include', headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ playbook_name: selectedPlaybook }),
+  });
+  const reader = resp.body.getReader();
+  const dec    = new TextDecoder();
+
+  function read() {
+    reader.read().then(({ done, value }) => {
+      if (done) return;
+      for (const line of dec.decode(value).split('\n')) {
+        if (!line.startsWith('data: ')) continue;
+        try {
+          const p = JSON.parse(line.slice(6));
+          if (p.progress) {
+            const pct = Math.round(p.progress.current / p.progress.total * 100);
+            document.getElementById('pbProgressBar').style.width = pct + '%';
+            document.getElementById('pbProgressText').textContent =
+              'Running check ' + p.progress.current + '/' + p.progress.total + ': ' + p.progress.query;
+          } else if (p.check_result) {
+            const r   = p.check_result;
+            const div = document.createElement('div');
+            div.className = 'pb-result-item';
+            div.innerHTML = `
+              <div class="pb-result-header">✅ Check ${r.index}: ${esc(r.query)}</div>
+              <div class="pb-result-body">${renderMarkdown(r.result)}</div>`;
+            document.getElementById('pbResults').appendChild(div);
+          } else if (p.playbook_done) {
+            document.getElementById('pbProgressBar').style.width = '100%';
+            document.getElementById('pbProgressText').textContent = '✅ Playbook complete!';
+          } else if (p.error) {
+            document.getElementById('pbProgressText').textContent = '❌ ' + p.error;
+          }
+        } catch(_) {}
+      }
+      read();
+    });
+  }
+  read();
+}
+
+/* ── Helpers ────────────────────────────────────────────── */
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function getAuthToken() {
+  // JWT is in an HttpOnly cookie — use credentials:'include' on all fetches instead.
+  return '';
+}
+async function apiFetch(url, method='GET', body=null) {
+  const opts = { method, credentials: 'include', headers: { 'Content-Type':'application/json' } };
+  if (body) opts.body = JSON.stringify(body);
+  const r = await fetch(url, opts);
+  return r.json().catch(()=>({error:'Parse error'}));
+}
+function showToast(msg, type='info') {
+  const t = document.createElement('div');
+  t.style.cssText = `position:fixed;bottom:20px;right:20px;z-index:9999;padding:10px 16px;border-radius:8px;font-size:13px;font-weight:500;box-shadow:0 4px 12px rgba(0,0,0,.15);background:${type==='success'?'#22C55E':type==='error'?'#EF4444':'#3B82F6'};color:#fff`;
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(()=>t.remove(), 3000);
+}
+function renderMarkdown(text) {
+  if (!text) return '';
+  let h = esc(text);
+  h = h.replace(/```sql\s*([\s\S]*?)```/gi, '<pre><code>$1</code></pre>');
+  h = h.replace(/```([\s\S]*?)```/g,        '<pre><code>$1</code></pre>');
+  h = h.replace(/`([^`]+)`/g,               '<code>$1</code>');
+  h = h.replace(/\*\*(.*?)\*\*/g,           '<strong>$1</strong>');
+  h = h.replace(/^### (.+)$/gm,             '<h4 style="margin:10px 0 4px;font-size:13px;color:var(--navy)">$1</h4>');
+  h = h.replace(/^## (.+)$/gm,              '<h3 style="margin:12px 0 6px;font-size:14px;color:var(--navy)">$1</h3>');
+  h = h.replace(/^# (.+)$/gm,               '<h2 style="margin:14px 0 8px;font-size:15px;color:var(--navy)">$1</h2>');
+  h = h.replace(/^[-*] (.+)$/gm,            '<li style="margin:2px 0">$1</li>');
+  h = h.replace(/(<li.*<\/li>\n?)+/g,       m => '<ul style="margin:6px 0 6px 18px">'+m+'</ul>');
+  h = h.replace(/\n\n/g,                    '<br><br>');
+  h = h.replace(/\n/g,                      '<br>');
+  return h;
+}
+
+loadAll();
+
+// ── Conversations ──────────────────────────────────────────────────
+Convs.init({
+  module:     'ai_agents',
+  titleElId:  'convTitle',
+  getDataFn:  () => {
+    const msgs = Array.from(document.querySelectorAll('#runChatMsgs .msg')).map(el=>({
+      role:    el.classList.contains('user')?'user':'assistant',
+      content: el.querySelector('.msg-bubble')?.innerText||el.querySelector('.bubble')?.innerText||'',
+    }));
+    return { messages: msgs, agent: selectedAgentName||'' };
+  },
+  loadDataFn: (data) => {
+    clearRunChat();
+    const box = document.getElementById('runChatMsgs');
+    if(!box) return;
+    (data.messages||[]).forEach(m => {
+      const row = document.createElement('div');
+      row.className = 'msg' + (m.role==='user'?' user':'');
+      row.innerHTML = `<div class="msg-bubble">${(m.content||'').replace(/</g,'&lt;')}</div>`;
+      box.appendChild(row);
+    });
+    const n = (data.messages||[]).filter(m=>m.role==='user').length;
+    if(n) document.getElementById('runChatMeta').textContent = `💬 ${n} exchange(s)`;
+  },
+  onNew: () => { if(typeof clearRunChat==='function') clearRunChat(); },
+});
+</script>
+{% endblock %}

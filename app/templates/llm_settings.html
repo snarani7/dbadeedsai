@@ -1,0 +1,298 @@
+{% extends "base.html" %}
+{% block title %}LLM Settings — dbadeeds.ai{% endblock %}
+{% block page_title %}⚙️ LLM Settings{% endblock %}
+{% set active_page = 'llm_settings' %}
+
+{% block head %}
+<style>
+  .provider-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:10px; margin-bottom:20px; }
+  .provider-card { background:var(--surface); border:2px solid var(--border); border-radius:10px;
+    padding:14px; cursor:pointer; transition:all .15s; text-align:center; user-select:none; }
+  .provider-card:hover  { border-color:var(--accent); box-shadow:var(--shadow); }
+  .provider-card.selected { border-color:var(--accent); background:#eff6ff; }
+  .provider-icon  { font-size:26px; margin-bottom:6px; }
+  .provider-label { font-size:13px; font-weight:600; color:var(--text); }
+  .provider-hint  { font-size:10px; color:var(--muted); margin-top:3px; }
+
+  .model-wrap   { max-width:420px; }
+  .extra-fields { display:none; margin-top:4px; }
+  .extra-fields.show { display:block; }
+
+  .config-bar { display:flex; align-items:center; gap:10px; padding:12px 16px;
+    background:var(--bg); border-radius:8px; border:1px solid var(--border);
+    margin-bottom:16px; font-size:13px; }
+  .config-bar .ptag { font-family:var(--mono); font-weight:600; color:var(--accent); }
+
+  .result-box { margin-top:12px; padding:12px 16px; border-radius:8px; font-size:13px; display:none; }
+  .result-box.ok  { background:#d1e7dd; color:#0a3622; display:block; }
+  .result-box.err { background:#f8d7da; color:#842029; display:block; }
+
+  .info-box { background:var(--bg); border:1px solid var(--border); border-radius:6px;
+    padding:10px 14px; font-size:12px; color:var(--muted); margin-top:6px; }
+  .info-box code { background:#e2e8f0; padding:1px 5px; border-radius:3px; font-size:11px; }
+
+  .provider-compare { width:100%; border-collapse:collapse; font-size:13px; margin-top:6px; }
+  .provider-compare th { background:#f8fafc; font-weight:600; font-size:11px; color:var(--muted);
+    text-transform:uppercase; padding:8px 12px; border-bottom:1px solid var(--border); text-align:left; }
+  .provider-compare td { padding:8px 12px; border-bottom:1px solid var(--border); }
+  .provider-compare tr:last-child td { border-bottom:none; }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Status bar -->
+<div class="config-bar" id="configBar">
+  <span style="font-size:20px" id="provIcon">⚙️</span>
+  <div>
+    <div>Current: <span class="ptag" id="curProv">loading…</span>
+      &nbsp;·&nbsp; <span id="curModel" style="font-family:var(--mono)">—</span></div>
+    <div style="color:var(--muted);font-size:11px">Applies to AI Assistant, AI Agents, and AskDBA</div>
+  </div>
+</div>
+
+<div class="card">
+  <div class="card-title">🤖 Configure LLM Provider</div>
+
+  <label class="form-label" style="margin-bottom:8px">Provider</label>
+  <div class="provider-grid" id="providerGrid">
+    <!-- Populated by JS -->
+  </div>
+
+  <!-- Model -->
+  <div class="form-group model-wrap">
+    <label class="form-label">Model *</label>
+    <select class="form-select" id="modelSelect"></select>
+  </div>
+
+  <!-- API Key (openai / anthropic / groq / gemini / together) -->
+  <div class="extra-fields" id="fieldApiKey">
+    <div class="form-group" style="max-width:480px">
+      <label class="form-label">API Key
+        <span id="apiKeyHint" style="color:var(--muted);font-weight:400;font-size:11px"></span>
+      </label>
+      <input class="form-input" id="apiKey" type="password" placeholder="Paste your API key…"/>
+    </div>
+  </div>
+
+  <!-- Vertex AI -->
+  <div class="extra-fields" id="fieldVertex">
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">GCP Project ID *</label>
+        <input class="form-input" id="vertexProject" placeholder="my-gcp-project-id"/>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Location / Region</label>
+        <input class="form-input" id="vertexLocation" value="us-central1"/>
+      </div>
+    </div>
+    <div class="info-box">
+      ℹ️ Vertex AI uses <strong>Application Default Credentials</strong>.<br>
+      Run <code>gcloud auth application-default login</code> or set <code>GOOGLE_APPLICATION_CREDENTIALS</code>.
+    </div>
+  </div>
+
+  <!-- Ollama -->
+  <div class="extra-fields" id="fieldOllama">
+    <div class="form-group" style="max-width:380px">
+      <label class="form-label">Ollama Server URL</label>
+      <input class="form-input" id="ollamaUrl" value="http://localhost:11434"/>
+    </div>
+    <div class="info-box">
+      ℹ️ Install Ollama from <a href="https://ollama.ai" target="_blank">ollama.ai</a>
+      then run: <code>ollama pull llama3.2</code>
+    </div>
+  </div>
+
+  <!-- Azure OpenAI -->
+  <div class="extra-fields" id="fieldAzure">
+    <div class="form-group" style="max-width:480px">
+      <label class="form-label">Azure OpenAI API Key *</label>
+      <input class="form-input" id="azureKey" type="password" placeholder="Your Azure OpenAI key…"/>
+    </div>
+    <div class="form-group" style="max-width:480px">
+      <label class="form-label">Azure Endpoint *</label>
+      <input class="form-input" id="azureEndpoint" placeholder="https://your-resource.openai.azure.com/"/>
+    </div>
+    <div class="info-box">
+      ℹ️ Get credentials from
+      <a href="https://portal.azure.com" target="_blank">Azure Portal</a> → Azure OpenAI resource.
+    </div>
+  </div>
+
+  <div style="display:flex;gap:8px;margin-top:20px;flex-wrap:wrap">
+    <button class="btn btn-primary"   onclick="saveConfig()">💾 Save Configuration</button>
+    <button class="btn btn-secondary" onclick="testConn()">🔗 Test Connection</button>
+    <button class="btn btn-secondary" onclick="resetDefaults()" style="margin-left:auto">↩ Reset</button>
+  </div>
+  <div class="result-box" id="resultBox"></div>
+</div>
+
+<!-- Provider comparison table -->
+<div class="card" style="margin-top:16px">
+  <div class="card-title">📊 Provider Comparison</div>
+  <table class="provider-compare">
+    <thead><tr><th>Provider</th><th>Internet</th><th>Cost</th><th>Best For</th></tr></thead>
+    <tbody>
+      <tr><td>OpenAI</td><td>Required</td><td>Paid</td><td>General purpose, best accuracy</td></tr>
+      <tr><td>Anthropic Claude</td><td>Required</td><td>Paid</td><td>Analysis, reasoning, long context</td></tr>
+      <tr><td>Google Gemini</td><td>Required</td><td>Free tier + Paid</td><td>Fast, multimodal, cheap</td></tr>
+      <tr><td>Groq</td><td>Required</td><td>Free tier + Paid</td><td>Fastest inference speed</td></tr>
+      <tr><td>Ollama (Local)</td><td>Not required</td><td>Free</td><td>Offline / privacy-sensitive</td></tr>
+      <tr><td>Azure OpenAI</td><td>Required</td><td>Paid</td><td>Enterprise, compliance</td></tr>
+      <tr><td>Together AI</td><td>Required</td><td>Paid</td><td>Open-source models</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<script>
+// ── State ─────────────────────────────────────────────────────────────────────
+let PROVIDERS = {};
+let selProvider = 'openai';
+let storedCfg   = {};
+
+// ── Init ──────────────────────────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', async () => {
+  try {
+    const d = await api('GET', '/llm/config');
+    if (!d) return;
+    PROVIDERS  = d.providers || {};
+    storedCfg  = d.config    || {};
+    renderGrid();
+    applyStoredConfig();
+  } catch(e) {
+    showResult('err', '❌ Failed to load configuration: ' + e.message);
+  }
+});
+
+// ── Render provider grid ──────────────────────────────────────────────────────
+function renderGrid() {
+  const grid = document.getElementById('providerGrid');
+  grid.innerHTML = Object.entries(PROVIDERS).map(([key, p]) => `
+    <div class="provider-card" id="pcard_${key}" onclick="selectProvider('${key}')">
+      <div class="provider-icon">${p.icon || '🤖'}</div>
+      <div class="provider-label">${p.label || key}</div>
+      <div class="provider-hint">${(p.requires||[]).join(', ')}</div>
+    </div>`
+  ).join('');
+}
+
+// ── Apply saved config from server ────────────────────────────────────────────
+function applyStoredConfig() {
+  const cfg = storedCfg;
+  // Status bar
+  document.getElementById('curProv').textContent  = cfg.provider || '—';
+  document.getElementById('curModel').textContent = cfg.model    || '—';
+  document.getElementById('provIcon').textContent = (PROVIDERS[cfg.provider]||{}).icon || '⚙️';
+
+  // Select provider (loads model list)
+  if (cfg.provider) selectProvider(cfg.provider, false);
+  if (cfg.model)    setModel(cfg.model);
+
+  // Restore saved fields
+  if (cfg.has_key)            document.getElementById('apiKey').placeholder     = '●●●● (saved — paste to replace)';
+  if (cfg.vertexai_project)   document.getElementById('vertexProject').value    = cfg.vertexai_project;
+  if (cfg.vertexai_location)  document.getElementById('vertexLocation').value   = cfg.vertexai_location;
+  if (cfg.ollama_base_url)    document.getElementById('ollamaUrl').value         = cfg.ollama_base_url;
+  if (cfg.azure_endpoint)     document.getElementById('azureEndpoint').value    = cfg.azure_endpoint;
+}
+
+// ── Select provider ───────────────────────────────────────────────────────────
+function selectProvider(key, updateModel=true) {
+  selProvider = key;
+  // Cards
+  document.querySelectorAll('.provider-card').forEach(c => c.classList.remove('selected'));
+  const card = document.getElementById('pcard_' + key);
+  if (card) card.classList.add('selected');
+
+  // Models
+  const p = PROVIDERS[key] || {};
+  if (updateModel) {
+    const sel = document.getElementById('modelSelect');
+    sel.innerHTML = (p.models || []).map(m => `<option value="${m}">${m}</option>`).join('');
+  }
+
+  // Show/hide extra fields
+  const apiKeyProviders = ['openai','anthropic','gemini','google','groq','together'];
+  show('fieldApiKey', apiKeyProviders.includes(key));
+  show('fieldVertex',  key === 'vertexai' || key === 'vertex');
+  show('fieldOllama',  key === 'ollama');
+  show('fieldAzure',   key === 'azure');
+
+  // Hint for API key env var
+  const hints = {
+    openai:'OPENAI_API_KEY', anthropic:'ANTHROPIC_API_KEY', gemini:'GOOGLE_API_KEY',
+    groq:'GROQ_API_KEY', together:'TOGETHER_API_KEY', azure:'AZURE_OPENAI_API_KEY'
+  };
+  document.getElementById('apiKeyHint').textContent = hints[key] ? `(env: ${hints[key]})` : '';
+}
+
+function show(id, visible) {
+  const el = document.getElementById(id);
+  if (el) el.classList.toggle('show', visible);
+}
+
+function setModel(model) {
+  const sel = document.getElementById('modelSelect');
+  const opt = [...sel.options].find(o => o.value === model);
+  if (opt) sel.value = model;
+}
+
+// ── Save config ────────────────────────────────────────────────────────────────
+async function saveConfig() {
+  const body = buildPayload();
+  showResult('ok', '⏳ Saving…');
+  const d = await api('POST', '/llm/config', body);
+  if (!d) { showResult('err', '❌ Request failed — check console'); return; }
+  if (d.error) { showResult('err', '❌ ' + d.error); return; }
+  showResult('ok', `✅ Saved: ${d.provider} / ${d.model}`);
+  document.getElementById('curProv').textContent  = d.provider;
+  document.getElementById('curModel').textContent = d.model;
+  document.getElementById('provIcon').textContent = (PROVIDERS[d.provider]||{}).icon || '⚙️';
+  // Update has_key hint
+  if (body.api_key) document.getElementById('apiKey').placeholder = '●●●● (saved — paste to replace)';
+}
+
+// ── Test connection ───────────────────────────────────────────────────────────
+async function testConn() {
+  showResult('ok', '⏳ Testing connection…');
+  const d = await api('POST', '/llm/test', buildPayload());
+  if (!d) { showResult('err', '❌ Request failed'); return; }
+  if (d.ok) showResult('ok', `✅ Connected! Response: "${d.response}"`);
+  else      showResult('err', '❌ ' + (d.error || 'Connection failed'));
+}
+
+// ── Reset ─────────────────────────────────────────────────────────────────────
+async function resetDefaults() {
+  if (!confirm('Reset to OpenAI gpt-4o-mini defaults?')) return;
+  selectProvider('openai');
+  const sel = document.getElementById('modelSelect');
+  sel.value = 'gpt-4o-mini';
+}
+
+// ── Build payload ─────────────────────────────────────────────────────────────
+function buildPayload() {
+  // For Azure, the "api_key" field is separate
+  let apiKey = document.getElementById('apiKey').value;
+  if (selProvider === 'azure' && !apiKey) {
+    apiKey = document.getElementById('azureKey').value;
+  }
+  return {
+    provider:          selProvider,
+    model:             document.getElementById('modelSelect').value,
+    api_key:           apiKey,
+    vertexai_project:  document.getElementById('vertexProject').value,
+    vertexai_location: document.getElementById('vertexLocation').value,
+    ollama_base_url:   document.getElementById('ollamaUrl').value,
+    azure_endpoint:    document.getElementById('azureEndpoint').value,
+  };
+}
+
+// ── Show result ───────────────────────────────────────────────────────────────
+function showResult(type, msg) {
+  const el = document.getElementById('resultBox');
+  el.className = 'result-box ' + type;
+  el.textContent = msg;
+}
+</script>
+{% endblock %}

@@ -1,0 +1,8 @@
+{
+  "admin": {
+    "provider": "gemini",
+    "model": "gemini-2.0-flash",
+    "api_key": "AIzaSyAmenR6ZaiFxBz8vIkMPOv3_kvHRgafWcQ",
+    "last_updated": "2026-03-27T21:35:02.277420+00:00"
+  }
+}
