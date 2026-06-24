@@ -1,4 +1,4 @@
-# dbadeeds.ai
+# dbadeeds.ai — AI-Powered Database Intelligence Platform
 
 A Flask-based web application for database administration and AI-powered assistance. Supports Oracle and PostgreSQL databases with natural language querying, AI chat, and automated monitoring.
 
